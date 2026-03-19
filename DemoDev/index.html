@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Developer Profile | Portfolio</title>
+    <meta name="description" content="프론트엔드 개발자 포트폴리오 웹사이트입니다.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="blob-bg"></div>
+
+    <header class="glass-header">
+        <nav class="container">
+            <div class="logo">Dev<span>Profile</span></div>
+            <ul class="nav-links">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#projects">Projects</a></li>
+                <li><a href="#experience">Experience</a></li>
+                <li><a href="#contact" class="btn-primary">Contact</a></li>
+            </ul>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Hero Section -->
+        <section id="home" class="hero fade-in">
+            <div class="container hero-content">
+                <p class="greeting">Hello, I'm</p>
+                <h1 class="title">Creative Developer.</h1>
+                <p class="subtitle">사용자 중심의 아름답고 직관적인 UI를 구현합니다.</p>
+                <div class="cta-group">
+                    <a href="#projects" class="btn-primary">View Projects</a>
+                    <a href="#about" class="btn-secondary">About Me</a>
+                </div>
+            </div>
+            <div class="scroll-indicator">
+                <div class="mouse"></div>
+            </div>
+        </section>
+
+        <!-- About Section -->
+        <section id="about" class="about section-padding hidden">
+            <div class="container">
+                <h2 class="section-title">About Me</h2>
+                <div class="about-grid">
+                    <div class="about-text glass-card">
+                        <p>웹의 가능성을 탐구하고, 더 나은 사용자 경험을 만드는 일에 열정을 쏟고 있습니다. 문제 해결 과정을 즐기며, 동료들과의 원활한 커뮤니케이션을 중요하게 생각합니다.</p>
+                        <p>새로운 기술을 배우고 적용하는 것을 두려워하지 않으며, 유지보수가 용이하고 확장성 있는 코드를 작성하기 위해 노력합니다.</p>
+                    </div>
+                    <div class="skills glass-card">
+                        <h3>Tech Stack</h3>
+                        <div class="skill-tags">
+                            <span class="tag">HTML5</span>
+                            <span class="tag">CSS3</span>
+                            <span class="tag">JavaScript</span>
+                            <span class="tag">TypeScript</span>
+                            <span class="tag">React</span>
+                            <span class="tag">Next.js</span>
+                            <span class="tag">TailwindCSS</span>
+                            <span class="tag">Node.js</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Projects Section -->
+        <section id="projects" class="projects section-padding hidden">
+            <div class="container">
+                <h2 class="section-title">Featured Projects</h2>
+                <div class="project-grid">
+                    <!-- Project 1 -->
+                    <div class="project-card glass-card">
+                        <div class="project-img-placeholder">
+                            <span>Project Image Placeholder</span>
+                        </div>
+                        <div class="project-info">
+                            <h3>E-Commerce Dashboard</h3>
+                            <p>실시간 데이터 시각화 및 상품 관리가 가능한 대시보드 애플리케이션.</p>
+                            <div class="tech-stack">
+                                <span>React</span>
+                                <span>TypeScript</span>
+                                <span>Chart.js</span>
+                            </div>
+                            <div class="project-links">
+                                <a href="#" class="btn-link">Live Demo &rarr;</a>
+                                <a href="#" class="btn-link">GitHub &rarr;</a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Project 2 -->
+                    <div class="project-card glass-card">
+                        <div class="project-img-placeholder">
+                            <span>Project Image Placeholder</span>
+                        </div>
+                        <div class="project-info">
+                            <h3>Social Media App</h3>
+                            <p>사용자 간 실시간 채팅 및 게시글 공유가 가능한 소셜 플랫폼.</p>
+                            <div class="tech-stack">
+                                <span>Next.js</span>
+                                <span>Supabase</span>
+                                <span>TailwindCSS</span>
+                            </div>
+                            <div class="project-links">
+                                <a href="#" class="btn-link">Live Demo &rarr;</a>
+                                <a href="#" class="btn-link">GitHub &rarr;</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Experience Section -->
+        <section id="experience" class="experience section-padding hidden">
+            <div class="container">
+                <h2 class="section-title">Experience</h2>
+                <div class="timeline">
+                    <div class="timeline-item glass-card">
+                        <div class="timeline-date">2023.03 - Present</div>
+                        <div class="timeline-content">
+                            <h3>Frontend Developer</h3>
+                            <h4>Tech Company A</h4>
+                            <ul>
+                                <li>사내 관리자 페이지 UI/UX 개선 및 React 마이그레이션 주도</li>
+                                <li>컴포넌트 공통화로 개발 생산성 30% 향상</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="timeline-item glass-card">
+                        <div class="timeline-date">2021.08 - 2023.02</div>
+                        <div class="timeline-content">
+                            <h3>Web Developer</h3>
+                            <h4>Startup B</h4>
+                            <ul>
+                                <li>초기 서비스 랜딩 페이지 기획 및 개발</li>
+                                <li>SEO 최적화를 통한 오가닉 트래픽 50% 증가</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contact Section -->
+        <section id="contact" class="contact section-padding hidden">
+            <div class="container">
+                <h2 class="section-title">Get In Touch</h2>
+                <div class="contact-wrapper glass-card">
+                    <div class="contact-info">
+                        <h3>Let's work together!</h3>
+                        <p>새로운 기회에 언제나 열려있습니다. 궁금한 점이 있으시거나 협업을 원하신다면 언제든 연락주세요.</p>
+                        <ul class="social-list">
+                            <li><a href="#">Email: contact@example.com</a></li>
+                            <li><a href="#">GitHub: @username</a></li>
+                            <li><a href="#">LinkedIn: In/username</a></li>
+                        </ul>
+                    </div>
+                    <form class="contact-form" id="contactForm">
+                        <div class="form-group">
+                            <label for="name">Name</label>
+                            <input type="text" id="name" required placeholder="Your Name">
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" required placeholder="your.email@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="message">Message</label>
+                            <textarea id="message" rows="5" required placeholder="Your Message"></textarea>
+                        </div>
+                        <button type="submit" class="btn-primary">Send Message</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Developer Profile. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
