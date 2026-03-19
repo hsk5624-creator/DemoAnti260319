@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -29,6 +31,7 @@ const formSchema = z.object({
 });
 
 export default function LoginPage() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -44,15 +47,22 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorMsg("");
     
-    setTimeout(() => {
-      setIsLoading(false);
-      
-      if (values.email === "test@example.com" && values.password === "password") {
-        alert("로그인에 성공했습니다! (서버 연동은 개발 예정)"); 
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: values.email,
+      password: values.password,
+    });
+
+    setIsLoading(false);
+    
+    if (error) {
+      if (error.message === "Email not confirmed") {
+        setErrorMsg("이메일 인증이 필요합니다. 가입하신 이메일의 메일함을 확인해 주세요.");
       } else {
-        setErrorMsg("이메일 또는 비밀번호가 올바르지 않습니다.");
+        setErrorMsg(error.message || "이메일 또는 비밀번호가 올바르지 않습니다.");
       }
-    }, 1500);
+    } else if (data.user) {
+      router.push("/dashboard"); 
+    }
   }
 
   return (

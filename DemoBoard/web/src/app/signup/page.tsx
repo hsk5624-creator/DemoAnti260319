@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -38,6 +40,7 @@ const formSchema = z.object({
 });
 
 export default function SignupPage() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -55,16 +58,24 @@ export default function SignupPage() {
     setIsLoading(true);
     setErrorMsg("");
     
-    // Simulate API Call for Sign UP
-    setTimeout(() => {
-      setIsLoading(false);
-      
-      // For this demo, let's just show a success alert regardless
-      alert(`환영합니다, ${values.name}님! 회원가입 로직이 호출되었습니다.`);
-      
-      // In a real application, we'd navigate to "/login" or directly dashboard here
-      // e.g. router.push("/login");
-    }, 1500);
+    const { data, error } = await supabase.auth.signUp({
+      email: values.email,
+      password: values.password,
+      options: {
+        data: {
+          name: values.name,
+        }
+      }
+    });
+
+    setIsLoading(false);
+    
+    if (error) {
+      setErrorMsg(error.message || "회원가입 중 오류가 발생했습니다.");
+    } else {
+      alert(`환영합니다, ${values.name}님! 성공적으로 가입되었습니다.`);
+      router.push("/");
+    }
   }
 
   return (
