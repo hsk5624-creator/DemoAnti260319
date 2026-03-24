@@ -1,11 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { GroupSummary, DeptSummary, fmt } from '@/lib/aggregate';
+import { GroupSummary, DeptSummary, fmt, getDeptAccountItems } from '@/lib/aggregate';
 import { BU_ORDER } from '@/lib/orgChart';
+import { ActualRow } from '@/lib/types';
+import TeamDetailModal from './TeamDetailModal';
 
 interface Props {
   groups: GroupSummary[];
+  rows: ActualRow[];
 }
 
 interface BuTotal {
@@ -60,11 +63,11 @@ function RateBar({ rate }: { rate: number }) {
 
 const M_BORDER = 'border-l-2 border-blue-500/30';
 
-function BuRow({ bu, total }: { bu: string; total: BuTotal }) {
+function BuRow({ bu, total, expanded, onToggle }: { bu: string; total: BuTotal; expanded: boolean; onToggle: () => void }) {
   return (
-    <tr className="bg-slate-700/70 border-t border-slate-500">
+    <tr className="bg-slate-700/70 border-t border-slate-500 cursor-pointer hover:bg-slate-600/70 transition-colors" onClick={onToggle}>
       <td className="py-2 pl-4 pr-3 text-xs font-bold text-slate-100 tracking-wide uppercase whitespace-nowrap">
-        ▌ {bu}
+        <span className="mr-1.5 text-slate-400 text-xs">{expanded ? '▼' : '▶'}</span>{bu}
       </td>
       <td className="py-2 px-3 text-right text-xs text-slate-200 tabular-nums font-bold whitespace-nowrap">{fmt(total.totalPlanY, true)}</td>
       <td className="py-2 px-3 text-right text-xs text-slate-200 tabular-nums font-bold whitespace-nowrap">{fmt(total.totalActualY, true)}</td>
@@ -80,11 +83,12 @@ function BuRow({ bu, total }: { bu: string; total: BuTotal }) {
   );
 }
 
-function TeamRow({ team }: { team: DeptSummary }) {
+function TeamRow({ team, onSelect }: { team: DeptSummary; onSelect: () => void }) {
   return (
-    <tr className="border-t border-slate-700/50 bg-slate-800/30">
+    <tr className="border-t border-slate-700/50 bg-slate-800/30 cursor-pointer hover:bg-slate-700/30 transition-colors" onClick={onSelect}>
       <td className="py-2 pl-10 pr-3 text-sm text-slate-300 whitespace-nowrap">
         <span className="text-slate-600 mr-1">└</span> {team.deptName}
+        <span className="ml-1.5 text-[10px] text-blue-400/70">상세▶</span>
       </td>
       <td className="py-2 px-3 text-right text-sm text-slate-300 tabular-nums whitespace-nowrap">{fmt(team.totalPlanY, true)}</td>
       <td className="py-2 px-3 text-right text-sm text-slate-300 tabular-nums whitespace-nowrap">{fmt(team.totalActualY, true)}</td>
@@ -124,13 +128,23 @@ function GroupRow({ group, expanded, onToggle }: { group: GroupSummary; expanded
   );
 }
 
-export default function OrgTable({ groups }: Props) {
+export default function OrgTable({ groups, rows }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [collapsedBu, setCollapsedBu] = useState<Set<string>>(new Set());
+  const [selectedTeam, setSelectedTeam] = useState<DeptSummary | null>(null);
 
   const toggle = (key: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const toggleBu = (bu: string) => {
+    setCollapsedBu((prev) => {
+      const next = new Set(prev);
+      next.has(bu) ? next.delete(bu) : next.add(bu);
       return next;
     });
   };
@@ -146,8 +160,15 @@ export default function OrgTable({ groups }: Props) {
     <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-700">
         <h2 className="text-sm font-semibold text-slate-200">조직별 집행 현황</h2>
-        <p className="text-xs text-slate-500 mt-0.5">담당 클릭 → 팀 상세 펼치기</p>
+        <p className="text-xs text-slate-500 mt-0.5">본부 클릭 → 접기/펼치기 · 담당 클릭 → 팀 상세</p>
       </div>
+      {selectedTeam && (
+        <TeamDetailModal
+          deptName={selectedTeam.deptName}
+          items={getDeptAccountItems(rows, selectedTeam.deptCode)}
+          onClose={() => setSelectedTeam(null)}
+        />
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
@@ -178,9 +199,9 @@ export default function OrgTable({ groups }: Props) {
               return (
                 <React.Fragment key={bu}>
                   {/* 본부 합계 행 */}
-                  <BuRow bu={bu} total={buTotal} />
+                  <BuRow bu={bu} total={buTotal} expanded={!collapsedBu.has(bu)} onToggle={() => toggleBu(bu)} />
                   {/* 담당 / 팀 행 */}
-                  {buGroups.map((group) => (
+                  {!collapsedBu.has(bu) && buGroups.map((group) => (
                     <React.Fragment key={group.groupKey}>
                       <GroupRow
                         group={group}
@@ -188,7 +209,7 @@ export default function OrgTable({ groups }: Props) {
                         onToggle={() => !group.isStandalone && toggle(group.groupKey)}
                       />
                       {expanded.has(group.groupKey) &&
-                        group.teams.map((team) => <TeamRow key={team.deptCode} team={team} />)}
+                        group.teams.map((team) => <TeamRow key={team.deptCode} team={team} onSelect={() => setSelectedTeam(team)} />)}
                     </React.Fragment>
                   ))}
                 </React.Fragment>

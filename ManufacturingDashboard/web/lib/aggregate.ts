@@ -294,6 +294,52 @@ export function getMonthlyBalanceItems(rows: ActualRow[]): BalanceItem[] {
     .sort((a, b) => b.budgetBalance - a.budgetBalance);
 }
 
+// ─── Team Account Detail ────────────────────────────────────────────────────
+
+export interface TeamAccountItem {
+  accountCode: string;
+  accountName: string;
+  totalPlanY: number;
+  totalActualY: number;
+  availableY: number;
+  totalPlanM: number;
+  actualSumM: number;
+  budgetBalance: number;
+  executionRateY: number;
+  executionRateM: number;
+}
+
+export function getDeptAccountItems(rows: ActualRow[], deptCode: string): TeamAccountItem[] {
+  const filtered = rows.filter((r) => r.deptCode === deptCode);
+  const map: Record<string, TeamAccountItem> = {};
+
+  for (const r of filtered) {
+    if (!map[r.accountCode]) {
+      map[r.accountCode] = {
+        accountCode: r.accountCode,
+        accountName: r.accountName,
+        totalPlanY: 0, totalActualY: 0, availableY: 0,
+        totalPlanM: 0, actualSumM: 0, budgetBalance: 0,
+        executionRateY: 0, executionRateM: 0,
+      };
+    }
+    const item = map[r.accountCode];
+    item.totalPlanY += r.totalPlanY;
+    item.totalActualY += r.totalActualY;
+    item.availableY += r.availableY;
+    item.totalPlanM += r.totalPlanM;
+    item.actualSumM += r.actualSumM;
+    item.budgetBalance += r.budgetBalance;
+  }
+
+  for (const item of Object.values(map)) {
+    item.executionRateY = item.totalPlanY ? (item.totalActualY / item.totalPlanY) * 100 : 0;
+    item.executionRateM = item.totalPlanM ? (item.actualSumM / item.totalPlanM) * 100 : 0;
+  }
+
+  return Object.values(map).sort((a, b) => b.totalActualY - a.totalActualY);
+}
+
 // ─── Formatter ─────────────────────────────────────────────────────────────
 
 export function fmt(v: number, short = false): string {

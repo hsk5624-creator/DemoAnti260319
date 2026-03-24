@@ -45,10 +45,9 @@ function fmtOk(v: number): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CustomBarLabel({ x, y, width, height, value, payload }: any) {
-  if (!payload || payload.totalActualY == null || value == null) return null;
+function CustomBarLabel({ x, y, width, height, payload }: any) {
+  if (!payload || payload.executionRate == null) return null;
   const d = payload as AccountSummary;
-  const label = `${fmtOk(d.totalActualY)}  (${Number(value).toFixed(1)}%)`;
   return (
     <text
       x={Number(x) + Number(width) + 6}
@@ -57,7 +56,7 @@ function CustomBarLabel({ x, y, width, height, value, payload }: any) {
       fontSize={11}
       dominantBaseline="middle"
     >
-      {label}
+      {`${d.executionRate.toFixed(1)}%`}
     </text>
   );
 }
@@ -107,8 +106,8 @@ export default function AccountChart({ accounts }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
             <XAxis
               type="number"
-              domain={[0, 100]}
-              tickFormatter={(v) => `${v}%`}
+              domain={[0, 'auto']}
+              tickFormatter={(v) => fmtOk(v)}
               tick={{ fill: '#94a3b8', fontSize: 11 }}
               axisLine={{ stroke: '#475569' }}
               tickLine={false}
@@ -126,7 +125,7 @@ export default function AccountChart({ accounts }: Props) {
               cursor={{ fill: 'rgba(148,163,184,0.08)' }}
             />
             <Bar
-              dataKey="executionRate"
+              dataKey="totalActualY"
               radius={[0, 4, 4, 0]}
               cursor="pointer"
               onClick={(data) => setSelected(data as unknown as AccountSummary)}
