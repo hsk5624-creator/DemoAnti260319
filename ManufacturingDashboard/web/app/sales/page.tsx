@@ -49,26 +49,52 @@ export default function SalesDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const storedFiles     = localStorage.getItem(FILES_KEY);
-      const storedPlanLabel = localStorage.getItem(PLAN_LABEL_KEY);
-      const storedSelected  = localStorage.getItem(SELECTED_LABEL_KEY);
-      const storedOrder     = localStorage.getItem(ORDER_KEY);
-      if (storedFiles) {
-        const files: SalesFile[] = JSON.parse(storedFiles);
+    async function init() {
+      try {
+        // 1) localStorage에서 복원
+        const storedFiles     = localStorage.getItem(FILES_KEY);
+        const storedPlanLabel = localStorage.getItem(PLAN_LABEL_KEY);
+        const storedSelected  = localStorage.getItem(SELECTED_LABEL_KEY);
+        const storedOrder     = localStorage.getItem(ORDER_KEY);
+
+        let files: SalesFile[] = storedFiles ? JSON.parse(storedFiles) : [];
+
+        // 2) 서버 data/매출/ 폴더에서 자동 로드 (localStorage에 없는 파일만 추가)
+        try {
+          const res = await fetch('/api/sales-files');
+          if (res.ok) {
+            const serverFiles: SalesFile[] = await res.json();
+            const existingLabels = new Set(files.map((f) => f.label));
+            for (const sf of serverFiles) {
+              if (!existingLabels.has(sf.label)) {
+                files.push(sf);
+              }
+            }
+            localStorage.setItem(FILES_KEY, JSON.stringify(files));
+          }
+        } catch { /* server unavailable — ignore */ }
+
         const order: string[] = storedOrder ? JSON.parse(storedOrder) : sortByDate(files).map((f) => f.label);
+        // order에 새로 추가된 파일도 포함
+        const allLabels = new Set(files.map((f) => f.label));
+        const newLabels = files.filter((f) => !order.includes(f.label)).map((f) => f.label);
+        const finalOrder = [...order.filter((l) => allLabels.has(l)), ...newLabels];
+
         setSalesFiles(files);
-        setFileOrder(order);
+        setFileOrder(finalOrder);
+        localStorage.setItem(ORDER_KEY, JSON.stringify(finalOrder));
+
         if (files.length > 0) {
-          const ordered = applyOrder(files, order);
+          const ordered = applyOrder(files, finalOrder);
           const validLabel = storedSelected && files.some((f) => f.label === storedSelected)
             ? storedSelected
             : ordered.at(-1)!.label;
           setSelectedLabel(validLabel);
         }
-      }
-      if (storedPlanLabel) setPlanLabel(storedPlanLabel);
-    } catch { /* ignore */ }
+        if (storedPlanLabel) setPlanLabel(storedPlanLabel);
+      } catch { /* ignore */ }
+    }
+    init();
   }, []);
 
   const upsertFile = useCallback((result: SalesFile) => {
