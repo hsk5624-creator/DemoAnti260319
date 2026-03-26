@@ -19,7 +19,7 @@ export const SALES_HIERARCHY: SalesCategoryDef[] = [
       {
         key: 'chem_etc',
         name: '기타(위임형 등)',
-        items: ['CMO상업_위임형', 'CMO상업_미국'],
+        items: ['CMO상업_위임형', 'CMO상업_미국', 'CMO상업_조달'],
       },
       {
         key: 'chem_inhouse',
@@ -33,10 +33,10 @@ export const SALES_HIERARCHY: SalesCategoryDef[] = [
     name: '바이오상업',
     groups: [
       {
-        key: 'bio_pfs',
-        name: 'PFS',
+        key: 'bio_phase1',
+        name: '바이오상업 1단계',
         // CMO상업_PFS = 2024/2025 합산 항목, 충전/조립/포장 = 2026+
-        items: ['CMO상업_PFS 충전', 'CMO상업_PFS 조립', 'CMO상업_PFS 포장', 'CMO상업_PFS'],
+        items: ['CMO상업_PFS 충전', 'CMO상업_PFS 조립', 'CMO상업_PFS 포장', 'CMO상업_PFS', 'CMO상업_L&P'],
       },
     ],
   },

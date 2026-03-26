@@ -10,6 +10,22 @@ export interface SalesRow {
   gap: number;            // Col N Gap
 }
 
+/** 파일명에서 추출한 메타데이터만 (XLSX 파싱 없이 빠르게 로드) */
+export interface SalesFileMeta {
+  name: string;
+  label: string;
+  refYear: number;
+  refMonth: number;
+  refDay: number;
+}
+
+export interface WeeklyNote {
+  category: string;
+  level: 'section' | 'parent' | 'child'; // section = 섹션 구분선 ("1) 3월 매출 특이사항")
+  delta?: number;   // 전주 대비 (억원 단위)
+  note: string;
+}
+
 export interface SalesFile {
   name: string;
   label: string;    // '26.03.19'
@@ -17,4 +33,5 @@ export interface SalesFile {
   refMonth: number; // 3
   refDay: number;   // 19
   rows: SalesRow[];
+  weeklyNotes?: WeeklyNote[];
 }

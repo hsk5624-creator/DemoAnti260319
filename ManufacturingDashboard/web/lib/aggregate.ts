@@ -154,6 +154,9 @@ export interface DeptActual {
   totalActualY: number;
   totalPlanY: number;
   executionRate: number;
+  totalPlanM: number;
+  actualSumM: number;
+  executionRateM: number;
 }
 
 export interface AccountSummary {
@@ -161,28 +164,35 @@ export interface AccountSummary {
   accountName: string;
   totalPlanY: number;
   totalActualY: number;
+  totalPlanM: number;
+  actualSumM: number;
   executionRate: number;
+  executionRateM: number;
   byDept: DeptActual[];
 }
 
 export function aggregateByAccount(rows: ActualRow[]): AccountSummary[] {
   const filtered = filterTeamRows(rows);
   const accountNames: Record<string, string> = {};
-  const byAccount: Record<string, { planY: number; actualY: number; depts: Record<string, { name: string; planY: number; actualY: number }> }> = {};
+  const byAccount: Record<string, { planY: number; actualY: number; planM: number; actualM: number; depts: Record<string, { name: string; planY: number; actualY: number; planM: number; actualM: number }> }> = {};
 
   for (const r of filtered) {
     accountNames[r.accountCode] = r.accountName;
     if (!byAccount[r.accountCode]) {
-      byAccount[r.accountCode] = { planY: 0, actualY: 0, depts: {} };
+      byAccount[r.accountCode] = { planY: 0, actualY: 0, planM: 0, actualM: 0, depts: {} };
     }
     const acc = byAccount[r.accountCode];
     acc.planY += r.totalPlanY;
     acc.actualY += r.totalActualY;
+    acc.planM += r.totalPlanM;
+    acc.actualM += r.actualSumM;
     if (!acc.depts[r.deptCode]) {
-      acc.depts[r.deptCode] = { name: r.deptName, planY: 0, actualY: 0 };
+      acc.depts[r.deptCode] = { name: r.deptName, planY: 0, actualY: 0, planM: 0, actualM: 0 };
     }
     acc.depts[r.deptCode].planY += r.totalPlanY;
     acc.depts[r.deptCode].actualY += r.totalActualY;
+    acc.depts[r.deptCode].planM += r.totalPlanM;
+    acc.depts[r.deptCode].actualM += r.actualSumM;
   }
 
   return Object.entries(byAccount)
@@ -191,7 +201,10 @@ export function aggregateByAccount(rows: ActualRow[]): AccountSummary[] {
       accountName: accountNames[code] || code,
       totalPlanY: v.planY,
       totalActualY: v.actualY,
+      totalPlanM: v.planM,
+      actualSumM: v.actualM,
       executionRate: v.planY ? (v.actualY / v.planY) * 100 : 0,
+      executionRateM: v.planM ? (v.actualM / v.planM) * 100 : 0,
       byDept: Object.entries(v.depts)
         .map(([dc, dv]) => ({
           deptCode: dc,
@@ -199,8 +212,11 @@ export function aggregateByAccount(rows: ActualRow[]): AccountSummary[] {
           totalActualY: dv.actualY,
           totalPlanY: dv.planY,
           executionRate: dv.planY ? (dv.actualY / dv.planY) * 100 : 0,
+          totalPlanM: dv.planM,
+          actualSumM: dv.actualM,
+          executionRateM: dv.planM ? (dv.actualM / dv.planM) * 100 : 0,
         }))
-        .sort((a, b) => b.totalActualY - a.totalActualY),
+        .sort((a, b) => b.actualSumM - a.actualSumM),
     }))
     .sort((a, b) => b.executionRate - a.executionRate);
 }

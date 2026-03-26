@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { SalesFile, SalesRow } from '@/lib/salesTypes';
+import { SalesFile, SalesFileMeta, SalesRow } from '@/lib/salesTypes';
 import { parseSalesFile } from '@/lib/parseSalesExcel';
 import {
   getSalesKpi, buildSalesHierarchy, getSalesMonthlyData, getSalesQuarterlyData,
@@ -12,14 +12,16 @@ import {
 import SalesFileManager from '@/components/SalesFileManager';
 import SalesKpiCards from '@/components/SalesKpiCards';
 import SalesQuarterlyCards from '@/components/SalesQuarterlyCards';
-import SalesHierarchyTable from '@/components/SalesHierarchyTable';
 import SalesMonthlyChart from '@/components/SalesMonthlyChart';
 import SalesSummaryTable from '@/components/SalesSummaryTable';
+import SalesWeeklyNotesCard from '@/components/SalesWeeklyNotesCard';
 
+const CACHE_VERSION      = '4';  // 파서 변경 시 올려서 캐시 자동 초기화
 const PLAN_LABEL_KEY     = 'sales-plan-label';
 const FILES_KEY          = 'sales-weekly-files';
 const SELECTED_LABEL_KEY = 'sales-selected-label';
 const ORDER_KEY          = 'sales-file-order';
+const CACHE_VER_KEY      = 'sales-cache-version';
 
 /** 날짜 기준 정렬 (오래된 순) — 초기 기본값용 */
 function sortByDate(files: SalesFile[]): SalesFile[] {
@@ -40,53 +42,66 @@ function applyOrder(files: SalesFile[], order: string[]): SalesFile[] {
 
 export default function SalesDashboard() {
   const [planLabel, setPlanLabel] = useState<string | null>(null);
-  const [salesFiles, setSalesFiles] = useState<SalesFile[]>([]);
+  const [salesFiles, setSalesFiles] = useState<SalesFile[]>([]);   // 완전히 파싱된 파일
+  const [stubMetas, setStubMetas] = useState<SalesFileMeta[]>([]);  // 서버 파일 메타만 (미파싱)
   const [fileOrder, setFileOrder] = useState<string[]>([]);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [compareLabel, setCompareLabel] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [loadingLabel, setLoadingLabel] = useState<string | null>(null); // 현재 파싱 중
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
       try {
-        // 1) localStorage에서 복원
+        // 파서 버전이 다르면 캐시 초기화
+        if (localStorage.getItem(CACHE_VER_KEY) !== CACHE_VERSION) {
+          localStorage.removeItem(FILES_KEY);
+          localStorage.removeItem(ORDER_KEY);
+          localStorage.removeItem(SELECTED_LABEL_KEY);
+          localStorage.setItem(CACHE_VER_KEY, CACHE_VERSION);
+        }
+
         const storedFiles     = localStorage.getItem(FILES_KEY);
         const storedPlanLabel = localStorage.getItem(PLAN_LABEL_KEY);
         const storedSelected  = localStorage.getItem(SELECTED_LABEL_KEY);
         const storedOrder     = localStorage.getItem(ORDER_KEY);
 
-        let files: SalesFile[] = storedFiles ? JSON.parse(storedFiles) : [];
+        const cachedFiles: SalesFile[] = storedFiles ? JSON.parse(storedFiles) : [];
+        const cachedLabels = new Set(cachedFiles.map((f) => f.label));
 
-        // 2) 서버 data/매출/ 폴더에서 자동 로드 (localStorage에 없는 파일만 추가)
+        // 서버에서 메타데이터만 빠르게 가져옴 (XLSX 파싱 없음)
+        let serverMetas: SalesFileMeta[] = [];
         try {
           const res = await fetch('/api/sales-files');
-          if (res.ok) {
-            const serverFiles: SalesFile[] = await res.json();
-            const existingLabels = new Set(files.map((f) => f.label));
-            for (const sf of serverFiles) {
-              if (!existingLabels.has(sf.label)) {
-                files.push(sf);
-              }
-            }
-            localStorage.setItem(FILES_KEY, JSON.stringify(files));
-          }
-        } catch { /* server unavailable — ignore */ }
+          if (res.ok) serverMetas = await res.json();
+        } catch { /* server unavailable */ }
 
-        const order: string[] = storedOrder ? JSON.parse(storedOrder) : sortByDate(files).map((f) => f.label);
-        // order에 새로 추가된 파일도 포함
-        const allLabels = new Set(files.map((f) => f.label));
-        const newLabels = files.filter((f) => !order.includes(f.label)).map((f) => f.label);
+        // 캐시에 없는 서버 파일 → stub으로 표시
+        const newStubs = serverMetas.filter((m) => !cachedLabels.has(m.label));
+
+        // 순서 계산: 캐시 + stub 합산
+        const allMetas: SalesFileMeta[] = [
+          ...cachedFiles,
+          ...newStubs,
+        ];
+        const order: string[] = storedOrder
+          ? JSON.parse(storedOrder)
+          : sortByDate(allMetas as SalesFile[]).map((f) => f.label);
+        const allLabels = new Set(allMetas.map((m) => m.label));
+        const newLabels = allMetas.filter((m) => !order.includes(m.label)).map((m) => m.label);
         const finalOrder = [...order.filter((l) => allLabels.has(l)), ...newLabels];
 
-        setSalesFiles(files);
+        setSalesFiles(cachedFiles);
+        setStubMetas(newStubs);
         setFileOrder(finalOrder);
         localStorage.setItem(ORDER_KEY, JSON.stringify(finalOrder));
 
-        if (files.length > 0) {
-          const ordered = applyOrder(files, finalOrder);
-          const validLabel = storedSelected && files.some((f) => f.label === storedSelected)
+        // 마지막 선택 파일 복원 (캐시에 있는 것만)
+        if (cachedFiles.length > 0 || newStubs.length > 0) {
+          const ordered = applyOrder(allMetas as SalesFile[], finalOrder);
+          const validLabel = storedSelected && allLabels.has(storedSelected)
             ? storedSelected
             : ordered.at(-1)!.label;
           setSelectedLabel(validLabel);
@@ -139,12 +154,48 @@ export default function SalesDashboard() {
     } finally { setLoading(false); }
   }, [upsertFile]);
 
+  /** stub 파일 클릭 시 온디맨드 파싱 */
+  const handleSelectFile = useCallback(async (label: string) => {
+    const isLoaded = salesFiles.some((f) => f.label === label);
+    if (isLoaded) {
+      setSelectedLabel(label);
+      localStorage.setItem(SELECTED_LABEL_KEY, label);
+      setCompareLabel(null);
+      return;
+    }
+    // stub → 파싱 요청
+    setLoadingLabel(label);
+    setSelectedLabel(label);
+    try {
+      const res = await fetch('/api/sales-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      if (!res.ok) throw new Error('parse failed');
+      const file: SalesFile = await res.json();
+      setSalesFiles((prev) => {
+        const next = [...prev, file];
+        localStorage.setItem(FILES_KEY, JSON.stringify(next));
+        return next;
+      });
+      setStubMetas((prev) => prev.filter((m) => m.label !== label));
+      localStorage.setItem(SELECTED_LABEL_KEY, label);
+      setCompareLabel(null);
+    } catch {
+      setError('파일 파싱에 실패했습니다.');
+    } finally {
+      setLoadingLabel(null);
+    }
+  }, [salesFiles]);
+
   const handleRemoveFile = useCallback((label: string) => {
     setSalesFiles((prev) => {
       const next = prev.filter((f) => f.label !== label);
       localStorage.setItem(FILES_KEY, JSON.stringify(next));
       return next;
     });
+    setStubMetas((prev) => prev.filter((m) => m.label !== label));
     setFileOrder((prev) => {
       const next = prev.filter((l) => l !== label);
       localStorage.setItem(ORDER_KEY, JSON.stringify(next));
@@ -236,24 +287,29 @@ export default function SalesDashboard() {
         <SalesFileManager
           planLabel={planLabel}
           salesFiles={orderedFiles}
+          stubMetas={stubMetas}
+          loadingLabel={loadingLabel}
           fileOrder={fileOrder}
           selectedLabel={selectedLabel}
           compareLabel={compareLabel}
           selectedYear={selectedYear}
           onPlanUpload={handlePlanUpload}
           onSalesUpload={handleSalesUpload}
-          onSelectFile={(label) => {
-              setSelectedLabel(label);
-              localStorage.setItem(SELECTED_LABEL_KEY, label);
-              setCompareLabel(null);
-            }}
+          onSelectFile={handleSelectFile}
           onSelectCompare={setCompareLabel}
           onRemoveFile={handleRemoveFile}
           onReorder={handleReorder}
           onSelectYear={setSelectedYear}
         />
 
-        {!selectedFile && (
+        {loadingLabel && (
+          <div className="flex flex-col items-center justify-center py-24 text-center space-y-3">
+            <div className="w-8 h-8 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" />
+            <p className="text-sm text-slate-400">{loadingLabel} 분석 중...</p>
+          </div>
+        )}
+
+        {!selectedFile && !loadingLabel && (
           <div className="flex flex-col items-center justify-center py-24 text-center space-y-3">
             <div className="text-5xl">📈</div>
             <h2 className="text-lg font-semibold text-slate-300">주간 매출 파일을 업로드해 주세요</h2>
@@ -269,20 +325,14 @@ export default function SalesDashboard() {
           </div>
         )}
 
-        {selectedFile && kpi && hierarchyRoot && (
+        {selectedFile && !loadingLabel && kpi && hierarchyRoot && (
           <>
             <SalesKpiCards kpi={kpi} year={selectedYear} label={selectedLabel ?? ''} hasPrev={!!prevFile} />
+            <SalesWeeklyNotesCard notes={selectedFile.weeklyNotes ?? []} label={selectedLabel ?? ''} gap={kpi.gap} hasPrev={!!prevFile} />
             <SalesQuarterlyCards quarters={quarterlyData} hasPrev={!!prevFile} />
             <SalesSummaryTable rows={rows} year={selectedYear} />
 
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-              <div className="xl:col-span-3">
-                <SalesHierarchyTable root={hierarchyRoot} />
-              </div>
-              <div className="xl:col-span-2">
-                <SalesMonthlyChart data={monthlyData} refMonth={selectedFile.refMonth} rows={rows} year={selectedYear} />
-              </div>
-            </div>
+            <SalesMonthlyChart data={monthlyData} refMonth={selectedFile.refMonth} rows={rows} year={selectedYear} />
           </>
         )}
       </main>

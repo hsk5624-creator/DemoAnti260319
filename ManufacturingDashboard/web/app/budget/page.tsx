@@ -183,14 +183,8 @@ export default function BudgetDashboard() {
               onBalanceClick={() => setShowBalanceModal(true)}
             />
 
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-              <div className="xl:col-span-3">
-                <OrgTable groups={groups} rows={selectedFile.rows} />
-              </div>
-              <div className="xl:col-span-2">
-                <AccountChart accounts={accounts} />
-              </div>
-            </div>
+            <AccountChart accounts={accounts} />
+            <OrgTable groups={groups} rows={selectedFile.rows} />
 
             {cumulData.length > 0 ? (
               <CumulativeChart data={cumulData} currentMonth={selectedFile.month} />

@@ -4,7 +4,7 @@ import { SalesQuarterlySummary, fmtSales } from '@/lib/salesAggregate';
 
 interface Props {
   quarters: SalesQuarterlySummary[];
-  hasPrev: boolean; // 전주 파일 유무 (Gap 표시 여부)
+  hasPrev: boolean;
 }
 
 function rateColor(rate: number) {
@@ -27,6 +27,21 @@ function gapColor(gap: number) {
   return 'text-slate-500';
 }
 
+/** 달성/예상 바 — 100% 초과 시 overflow 세그먼트 표시 */
+function RateBar({ rate, color }: { rate: number; color: string }) {
+  const capped = Math.min(rate, 100);
+  const overflow = rate > 100;
+  return (
+    <div className="relative w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${capped}%` }} />
+      {overflow && (
+        /* 100% 초과분: 오른쪽 끝에 밝은 표시 */
+        <div className="absolute right-0 top-0 h-full w-2 rounded-r-full bg-emerald-300 opacity-80" />
+      )}
+    </div>
+  );
+}
+
 export default function SalesQuarterlyCards({ quarters, hasPrev }: Props) {
   if (!quarters.length) return null;
 
@@ -39,35 +54,43 @@ export default function SalesQuarterlyCards({ quarters, hasPrev }: Props) {
             key={q.quarter}
             className="bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-col gap-2.5"
           >
-            {/* 분기 헤더 */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300 tracking-wide">{q.label}</span>
-              <span className={`text-base font-bold tabular-nums ${rateColor(q.achievementRate)}`}>
+            {/* 분기 헤더 + 실적/계획 */}
+            <div className="flex items-start justify-between gap-1">
+              <span className="text-xs font-bold text-slate-300 tracking-wide pt-0.5">{q.label}</span>
+              <span className="text-xs tabular-nums text-right leading-snug">
+                <span className="text-slate-200 font-semibold">{fmtSales(q.actual, true)}</span>
+                <span className="text-slate-600 mx-0.5">/</span>
+                <span className="text-slate-500">{fmtSales(q.plan, true)}</span>
+              </span>
+            </div>
+
+            {/* 달성률 바 + % */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <RateBar rate={q.achievementRate} color={barColor(q.achievementRate)} />
+              </div>
+              <span className={`text-xs font-bold tabular-nums w-12 text-right shrink-0 ${rateColor(q.achievementRate)}`}>
                 {q.achievementRate.toFixed(1)}%
               </span>
             </div>
 
-            {/* 진행 바 */}
-            <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full ${barColor(q.achievementRate)}`}
-                style={{ width: `${Math.min(q.achievementRate, 100)}%` }}
-              />
-            </div>
-
-            {/* 실적 / 계획 */}
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-slate-400">
-                <span>실적</span>
-                <span className="text-slate-200 tabular-nums font-medium">{fmtSales(q.actual, true)}</span>
-              </div>
-              <div className="flex justify-between text-slate-400">
-                <span>계획</span>
-                <span className="text-slate-400 tabular-nums">{fmtSales(q.plan, true)}</span>
-              </div>
-              <div className="flex justify-between text-slate-400">
+            {/* 예상마감 바 + % */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
                 <span>예상마감</span>
-                <span className={`tabular-nums ${rateColor(q.forecastRate)}`}>{fmtSales(q.forecast, true)}</span>
+                <span className="tabular-nums text-right leading-snug">
+                  <span className={`font-semibold ${rateColor(q.forecastRate)}`}>{fmtSales(q.forecast, true)}</span>
+                  <span className="text-slate-600 mx-0.5">/</span>
+                  <span className="text-slate-500">{fmtSales(q.plan, true)}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <RateBar rate={q.forecastRate} color={`${barColor(q.forecastRate)} opacity-60`} />
+                </div>
+                <span className={`text-xs tabular-nums w-12 text-right shrink-0 ${rateColor(q.forecastRate)}`}>
+                  {q.forecastRate.toFixed(1)}%
+                </span>
               </div>
             </div>
 

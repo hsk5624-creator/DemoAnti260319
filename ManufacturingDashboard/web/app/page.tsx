@@ -29,7 +29,7 @@ const DASHBOARDS = [
     description: '설비 및 라인별 가동률 현황과 비가동 원인을 분석합니다.',
     tags: ['가동률', '비가동 분석', '설비별 현황'],
     color: 'violet',
-    ready: false,
+    ready: true,
   },
 ];
 

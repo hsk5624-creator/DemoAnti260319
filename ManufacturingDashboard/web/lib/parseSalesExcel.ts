@@ -42,6 +42,110 @@ function parseFileNameDate(name: string): { refYear: number; refMonth: number; r
   return { refYear: 0, refMonth: 0, refDay: 0, label: name.replace(/\.[^/.]+$/, '') };
 }
 
+function parseSummaryReport(wb: XLSX.WorkBook): SalesFile['weeklyNotes'] {
+  const sheetName = wb.SheetNames.find((s) => s.includes('요약') && s.includes('보고'));
+  if (!sheetName) return [];
+  const ws = wb.Sheets[sheetName];
+  const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+
+  type WN = NonNullable<SalesFile['weeklyNotes']>[number];
+  type RawItem = { category: string; level: 'parent' | 'child'; delta?: number; note: string };
+  interface Group { parent: WN; children: WN[] }
+
+  // 실적/변동사항 섹션만 수집 (실질 롤링 등 정적 템플릿 섹션 제외)
+  const sections: { headerRow: number; noteCol: number; deltaCol: number }[] = [];
+  let pendingIsValid = false;
+
+  for (let i = 20; i < Math.min(raw.length, 80); i++) {
+    const r = raw[i] as unknown[] | undefined;
+    if (!r) continue;
+    const c1 = String(r[1] ?? '').trim();
+    if (/^\d+\)/.test(c1)) {
+      pendingIsValid = c1.includes('특이사항') || c1.includes('변동사항');
+      continue;
+    }
+    if (c1 === '구분' && pendingIsValid) {
+      let noteCol = 12, deltaCol = -1;
+      for (let c = 1; c <= 24; c++) {
+        const v = String(r[c] ?? '').trim();
+        if (v.includes('사유') || v.includes('특이사항')) noteCol = c;
+        if (v === '전주 대비') deltaCol = c;
+      }
+      sections.push({ headerRow: i, noteCol, deltaCol });
+      pendingIsValid = false;
+    }
+  }
+  if (sections.length === 0) return [];
+
+  // Group 기반 병합: parent → { parent, children[] }
+  const groups: Group[] = [];
+  const groupIdx = new Map<string, number>(); // parentCategory → groups index
+
+  for (let secIdx = 0; secIdx < sections.length; secIdx++) {
+    const sec = sections[secIdx];
+    const isFirst = secIdx === 0;
+
+    const allItems: RawItem[] = [];
+    for (let i = sec.headerRow + 1; i < Math.min(sec.headerRow + 15, raw.length); i++) {
+      const r = raw[i] as unknown[] | undefined;
+      if (!r || r.every((v) => v == null || v === '')) break;
+      const colB = String(r[1] ?? '').trim();
+      const colC = String(r[2] ?? '').trim();
+      if (colB === '총합' || colB === '합계') break;
+      const note = String(r[sec.noteCol] ?? '').trim();
+      const deltaRaw = sec.deltaCol !== -1 ? r[sec.deltaCol] : null;
+      const deltaNum = deltaRaw != null && deltaRaw !== '' ? Number(deltaRaw) : undefined;
+      const delta = deltaNum !== undefined && !isNaN(deltaNum) ? deltaNum : undefined;
+      if (colB) allItems.push({ category: colB, level: 'parent', delta, note });
+      else if (colC) allItems.push({ category: colC, level: 'child', delta, note });
+    }
+
+    let idx = 0;
+    while (idx < allItems.length) {
+      const item = allItems[idx];
+      if (item.level === 'parent') {
+        idx++;
+        const children: RawItem[] = [];
+        while (idx < allItems.length && allItems[idx].level === 'child') {
+          children.push(allItems[idx++]);
+        }
+        const relevantChildren = children.filter((c) => c.note || (c.delta !== undefined && c.delta !== 0));
+        const parentHasData = item.note || (item.delta !== undefined && item.delta !== 0);
+        if (!parentHasData && relevantChildren.length === 0) continue;
+
+        if (groupIdx.has(item.category)) {
+          // 이미 존재 → delta/note 보완만 (새 자식 추가 안함)
+          const g = groups[groupIdx.get(item.category)!];
+          if ((g.parent.delta === undefined || g.parent.delta === 0) && item.delta !== undefined && item.delta !== 0) {
+            g.parent.delta = item.delta;
+          }
+          if (!g.parent.note && item.note) g.parent.note = item.note;
+          for (const child of relevantChildren) {
+            const ec = g.children.find((c) => c.category === child.category);
+            if (ec) {
+              if ((ec.delta === undefined || ec.delta === 0) && child.delta !== undefined && child.delta !== 0) ec.delta = child.delta;
+              if (!ec.note && child.note) ec.note = child.note;
+            }
+          }
+        } else if (isFirst) {
+          const pWN: WN = { category: item.category, level: 'parent', delta: item.delta, note: item.note };
+          groupIdx.set(item.category, groups.length);
+          groups.push({ parent: pWN, children: relevantChildren.map((c) => ({ category: c.category, level: 'child' as const, delta: c.delta, note: c.note })) });
+        }
+      } else {
+        idx++;
+      }
+    }
+  }
+
+  const merged: NonNullable<SalesFile['weeklyNotes']> = [];
+  for (const g of groups) {
+    merged.push(g.parent);
+    merged.push(...g.children);
+  }
+  return merged;
+}
+
 export function parseSalesFile(file: File): Promise<SalesFile> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -101,7 +205,8 @@ export function parseSalesFile(file: File): Promise<SalesFile> {
         }
 
         const { refYear, refMonth, refDay, label } = parseFileNameDate(file.name);
-        resolve({ name: file.name, label, refYear, refMonth, refDay, rows });
+        const weeklyNotes = parseSummaryReport(wb);
+        resolve({ name: file.name, label, refYear, refMonth, refDay, rows, weeklyNotes });
       } catch (err) {
         reject(err);
       }

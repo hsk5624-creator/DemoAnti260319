@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "제조경영 예산 대시보드",
+  title: "제조경영 대시보드",
   description: "제조부문 예산 계획 대비 실적 모니터링 대시보드",
 };
 

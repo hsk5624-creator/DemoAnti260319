@@ -9,6 +9,9 @@ for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr " :3010 "') do (
   taskkill /PID %%p /F 2>nul
 )
 
+rem Clean stale cache to prevent 404 errors
+if exist ".next" rmdir /s /q ".next" 2>nul
+
 start cmd /k "npm run dev -- --port 3010"
 
 :wait

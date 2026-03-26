@@ -155,6 +155,7 @@ export default function OrgTable({ groups, rows }: Props) {
     buMap.get(g.parentBu)!.push(g);
   }
   const buList = BU_ORDER.filter((bu) => buMap.has(bu));
+  const grandTotal = computeBuTotal(groups);
 
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
@@ -193,6 +194,22 @@ export default function OrgTable({ groups, rows }: Props) {
             </tr>
           </thead>
           <tbody>
+            {/* 제조부문 합계 행 */}
+            <tr className="bg-slate-600/50 border-b-2 border-slate-500">
+              <td className="py-2.5 pl-4 pr-3 text-xs font-bold text-white tracking-wide whitespace-nowrap">
+                ∑ 제조부문 합계
+              </td>
+              <td className="py-2.5 px-3 text-right text-xs text-white tabular-nums font-bold whitespace-nowrap">{fmt(grandTotal.totalPlanY, true)}</td>
+              <td className="py-2.5 px-3 text-right text-xs text-white tabular-nums font-bold whitespace-nowrap">{fmt(grandTotal.totalActualY, true)}</td>
+              <td className="py-2.5 px-3 whitespace-nowrap"><RateBar rate={grandTotal.executionRateY} /></td>
+              <td className={`py-2.5 px-3 text-right text-xs tabular-nums font-bold whitespace-nowrap ${grandTotal.diffY > 0 ? 'text-red-400' : grandTotal.diffY < 0 ? 'text-blue-400' : 'text-slate-400'}`}>
+                {grandTotal.diffY > 0 ? '+' : ''}{fmt(grandTotal.diffY, true)}
+              </td>
+              <td className="py-2.5 px-3 text-right text-xs text-slate-200 tabular-nums font-bold whitespace-nowrap">{fmt(grandTotal.availableY, true)}</td>
+              <td className={`py-2.5 px-3 text-right text-xs text-white tabular-nums font-bold whitespace-nowrap ${M_BORDER}`}>{fmt(grandTotal.totalPlanM, true)}</td>
+              <td className="py-2.5 px-3 text-right text-xs text-white tabular-nums font-bold whitespace-nowrap">{fmt(grandTotal.actualSumM, true)}</td>
+              <td className="py-2.5 px-3 whitespace-nowrap"><RateBar rate={grandTotal.executionRateM} /></td>
+            </tr>
             {buList.map((bu) => {
               const buGroups = buMap.get(bu)!;
               const buTotal = computeBuTotal(buGroups);

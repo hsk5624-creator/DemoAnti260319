@@ -6,15 +6,11 @@ import { getSalesSummaryMatrix, SalesSummaryRow, MonthlyCellData } from '@/lib/s
 
 type Metric = 'actual' | 'plan' | 'forecast' | 'gap';
 
-/** 억원 단위 숫자만 반환 (단위 표기 없음) */
+/** 억원 단위 숫자만 반환 (단위 표기 없음, 소수점 1자리 고정) */
 function fmtAeok(v: number): string {
   if (v === 0) return '—';
-  const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
-  // fmtSales 기준: 1억 = 100,000,000
-  if (abs >= 100_000_000) return `${sign}${(abs / 100_000_000).toFixed(1)}`;
-  if (abs >= 10_000)      return `${sign}${(abs / 100_000_000).toFixed(3)}`; // 만원 대 → 소수 표시
-  return `${sign}${(abs / 100_000_000).toFixed(4)}`;
+  return `${sign}${(Math.abs(v) / 100_000_000).toFixed(1)}`;
 }
 
 const QUARTERS = [1, 2, 3, 4] as const;
@@ -48,7 +44,7 @@ function cellValue(cell: MonthlyCellData, metric: Metric): number {
 }
 
 export default function SalesSummaryTable({ rows, year }: { rows: SalesRow[]; year: number }) {
-  const [metric, setMetric] = useState<Metric>('forecast');
+  const [metric, setMetric] = useState<Metric>('gap');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const allRows = getSalesSummaryMatrix(rows, year);
@@ -83,7 +79,7 @@ export default function SalesSummaryTable({ rows, year }: { rows: SalesRow[]; ye
           <span className="text-[11px] text-slate-500">(단위: 억원)</span>
         </div>
         <div className="flex gap-1">
-          {(['plan', 'actual', 'forecast', 'gap'] as Metric[]).map((m) => (
+          {(['gap', 'forecast', 'actual', 'plan'] as Metric[]).map((m) => (
             <button
               key={m}
               onClick={() => setMetric(m)}

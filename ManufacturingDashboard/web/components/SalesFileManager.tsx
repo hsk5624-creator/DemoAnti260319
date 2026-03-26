@@ -1,11 +1,13 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { SalesFile } from '@/lib/salesTypes';
+import { SalesFile, SalesFileMeta } from '@/lib/salesTypes';
 
 interface Props {
   planLabel: string | null;
   salesFiles: SalesFile[];
+  stubMetas: SalesFileMeta[];      // 서버에만 있고 아직 파싱 안 된 파일
+  loadingLabel: string | null;     // 현재 파싱 중인 파일 label
   fileOrder: string[];
   selectedLabel: string | null;
   compareLabel: string | null;
@@ -22,7 +24,7 @@ interface Props {
 const YEARS = [2024, 2025, 2026];
 
 export default function SalesFileManager({
-  planLabel, salesFiles, fileOrder, selectedLabel, compareLabel, selectedYear,
+  planLabel, salesFiles, stubMetas, loadingLabel, fileOrder, selectedLabel, compareLabel, selectedYear,
   onPlanUpload, onSalesUpload, onSelectFile, onSelectCompare, onRemoveFile, onReorder, onSelectYear,
 }: Props) {
   const planRef   = useRef<HTMLInputElement>(null);
@@ -79,6 +81,10 @@ export default function SalesFileManager({
     }
   };
 
+  // fileOrder 순서로 loaded + stub 합쳐서 표시할 항목 생성
+  const allFileLabels = fileOrder.filter(
+    (l) => salesFiles.some((f) => f.label === l) || stubMetas.some((m) => m.label === l)
+  );
   const compareOptions = salesFiles.filter((f) => f.label !== selectedLabel);
 
   return (
@@ -120,7 +126,7 @@ export default function SalesFileManager({
         </div>
       </div>
 
-      {salesFiles.length > 0 && (
+      {allFileLabels.length > 0 && (
         <>
           {/* 조회 파일 — 드래그 순서 변경 */}
           <div className="space-y-1.5">
@@ -136,43 +142,54 @@ export default function SalesFileManager({
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
             >
-              {salesFiles.map((f, idx) => (
-                <div key={f.label} className="flex items-center">
-                  {/* 삽입 인디케이터 — 이 아이템 앞 */}
-                  <div className={`h-6 rounded-full transition-all duration-150 ${
-                    insertIdx === idx
-                      ? 'w-0.5 mx-1 bg-blue-400 shadow-[0_0_6px_2px_rgba(96,165,250,0.5)]'
-                      : 'w-0 mx-0 bg-transparent'
-                  }`} />
-
-                  {/* 파일 칩 */}
-                  <div
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, idx)}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={(e) => handleDragOver(e, idx)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs
-                      transition-colors select-none cursor-grab active:cursor-grabbing
-                      ${selectedLabel === f.label
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:border-slate-500'}
-                      ${dragIdx.current === idx ? 'opacity-35' : 'opacity-100'}`}
-                    onClick={() => { if (dragIdx.current === null) onSelectFile(f.label); }}
-                  >
-                    <span className="text-slate-600 text-[10px]">⠿</span>
-                    <span className="font-medium">{f.label}</span>
-                    <button
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => { e.stopPropagation(); onRemoveFile(f.label); }}
-                      className="text-slate-600 hover:text-red-400 transition-colors ml-1"
-                    >✕</button>
+              {allFileLabels.map((label, idx) => {
+                const isLoaded  = salesFiles.some((f) => f.label === label);
+                const isLoading = loadingLabel === label;
+                return (
+                  <div key={label} className="flex items-center">
+                    <div className={`h-6 rounded-full transition-all duration-150 ${
+                      insertIdx === idx
+                        ? 'w-0.5 mx-1 bg-blue-400 shadow-[0_0_6px_2px_rgba(96,165,250,0.5)]'
+                        : 'w-0 mx-0 bg-transparent'
+                    }`} />
+                    <div
+                      draggable={isLoaded}
+                      onDragStart={(e) => isLoaded && handleDragStart(e, idx)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-colors select-none
+                        ${isLoading
+                          ? 'bg-slate-700/30 border-slate-700 text-slate-500 cursor-wait'
+                          : isLoaded
+                            ? `cursor-grab active:cursor-grabbing ${selectedLabel === label
+                                ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                                : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:border-slate-500'}`
+                            : 'border-dashed border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-300 cursor-pointer'}
+                        ${dragIdx.current === idx ? 'opacity-35' : 'opacity-100'}`}
+                      onClick={() => { if (dragIdx.current === null && !isLoading) onSelectFile(label); }}
+                    >
+                      {isLoading
+                        ? <span className="w-3 h-3 rounded-full border-2 border-slate-500 border-t-transparent animate-spin inline-block" />
+                        : isLoaded
+                          ? <span className="text-slate-600 text-[10px]">⠿</span>
+                          : <span className="text-slate-600 text-[10px]">▷</span>
+                      }
+                      <span className="font-medium">{label}</span>
+                      {isLoaded && (
+                        <button
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); onRemoveFile(label); }}
+                          className="text-slate-600 hover:text-red-400 transition-colors ml-1"
+                        >✕</button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* 마지막 아이템 뒤 삽입 인디케이터 */}
               <div className={`h-6 rounded-full transition-all duration-150 ${
-                insertIdx === salesFiles.length
+                insertIdx === allFileLabels.length
                   ? 'w-0.5 mx-1 bg-blue-400 shadow-[0_0_6px_2px_rgba(96,165,250,0.5)]'
                   : 'w-0 mx-0 bg-transparent'
               }`} />
