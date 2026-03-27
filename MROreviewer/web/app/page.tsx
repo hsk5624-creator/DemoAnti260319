@@ -246,7 +246,6 @@ export default function Home() {
             <h1 className="text-xl font-bold text-white">MRO 구매 검토 시스템</h1>
             <p className="text-green-200 text-xs mt-0.5">2024~2025 이력 기반 · 구매 적절성 검토</p>
           </div>
-          <div className="text-green-200 text-xs">셀트리온제약</div>
         </div>
       </header>
 

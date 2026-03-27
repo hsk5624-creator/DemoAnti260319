@@ -72,7 +72,6 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-gray-300 text-xs mt-6">셀트리온제약</p>
       </div>
     </div>
   );
