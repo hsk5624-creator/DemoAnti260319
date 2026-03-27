@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PASSWORD = process.env.MRO_PASSWORD || "순목1!";
+const PASSWORD = process.env.MRO_PASSWORD || "cell123!hs";
 
 export async function POST(request: NextRequest) {
   const { password } = await request.json();

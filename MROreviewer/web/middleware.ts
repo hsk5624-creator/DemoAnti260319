@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PASSWORD = process.env.MRO_PASSWORD || "순목1!";
+const PASSWORD = process.env.MRO_PASSWORD || "cell123!hs";
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
