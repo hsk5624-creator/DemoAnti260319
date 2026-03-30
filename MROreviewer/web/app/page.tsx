@@ -305,6 +305,11 @@ export default function Home() {
             />
           )}
 
+          {/* 검토 중인 구매 건 입력 — analysis 블록 밖에서 항상 마운트 유지 */}
+          {(analysis || loading) && (
+            <ReviewInput onChange={setReviewItem} />
+          )}
+
           {/* 분석 결과 */}
           {analysis && (
             <div className="space-y-4">
@@ -332,9 +337,6 @@ export default function Home() {
                   </span>
                 )}
               </div>
-
-              {/* 검토 중인 구매 건 입력 */}
-              <ReviewInput onChange={setReviewItem} />
 
               {/* 검토 비교 결과 */}
               {reviewItem && (

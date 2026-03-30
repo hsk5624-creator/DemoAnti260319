@@ -36,6 +36,7 @@ interface Bucket {
   year: number;
   month: number;
   totalAmount: number;
+  reviewAmount: number; // 검토 중인 건 금액 (오늘 달에만)
   count: number;
   hasPurchase: boolean;
 }
@@ -50,6 +51,7 @@ function buildBuckets(
   data: MonthlyPoint[],
   events: PurchaseEvent[],
   expectedNextTs: number | null,
+  reviewAmount: number,
 ): Bucket[] {
   const map = new Map<string, MonthlyPoint>();
   for (const d of data) map.set(d.label, d);
@@ -61,6 +63,9 @@ function buildBuckets(
   const minD = new Date(Math.min(...allTs));
   const maxD = new Date(Math.max(...allTs));
   maxD.setMonth(maxD.getMonth() + 2);
+
+  const now = new Date();
+  const todayKey_ = monthKey(now.getFullYear(), now.getMonth() + 1);
 
   const buckets: Bucket[] = [];
   const cur = new Date(minD.getFullYear(), minD.getMonth(), 1);
@@ -76,6 +81,7 @@ function buildBuckets(
       year: y,
       month: mo,
       totalAmount: d?.totalAmount ?? 0,
+      reviewAmount: k === todayKey_ ? reviewAmount : 0,
       count: d?.count ?? 0,
       hasPurchase: !!d,
     });
@@ -100,6 +106,11 @@ function CustomTooltip({ active, payload }: any) {
       ) : (
         <div className="text-gray-400">구매 없음</div>
       )}
+      {d.reviewAmount > 0 && (
+        <div className="text-red-600 font-semibold border-t border-gray-100 pt-0.5 mt-0.5">
+          검토 중: {d.reviewAmount.toLocaleString()}원
+        </div>
+      )}
     </div>
   );
 }
@@ -116,7 +127,7 @@ export default function AmountTrendChart({ data, events, review, avgIntervalDays
     ? monthKey(new Date(expectedNextTs).getFullYear(), new Date(expectedNextTs).getMonth() + 1)
     : null;
 
-  const buckets = buildBuckets(data, events, expectedNextTs);
+  const buckets = buildBuckets(data, events, expectedNextTs, review?.amount ?? 0);
 
   // 과거 월평균 금액 (구매 있는 달만)
   const historyData = buckets.filter((b) => b.year !== 2026 && b.hasPurchase);
@@ -144,6 +155,12 @@ export default function AmountTrendChart({ data, events, review, avgIntervalDays
           <span className="w-6 border-t-2 border-[#00733C] inline-block" />
           총금액
         </span>
+        {review && review.amount > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-sm inline-block border-2 border-red-500" style={{ background: "rgba(220,38,38,0.25)" }} />
+            <span className="text-red-600 font-medium">검토 중</span>
+          </span>
+        )}
         <span className="flex items-center gap-1 ml-auto">
           <span className="w-6 border-t-2 border-dashed border-red-500 inline-block" />
           현재
@@ -243,6 +260,20 @@ export default function AmountTrendChart({ data, events, review, avgIntervalDays
               />
             ))}
           </Bar>
+          {/* 검토 중인 건 금액 막대 (오늘 달, 빨간 테두리) */}
+          {review && review.amount > 0 && (
+            <Bar
+              dataKey="reviewAmount"
+              yAxisId="amount"
+              maxBarSize={20}
+              fill="rgba(220,38,38,0.2)"
+              stroke="#dc2626"
+              strokeWidth={1.5}
+              radius={[3, 3, 0, 0]}
+              name="검토 중"
+            />
+          )}
+
           <Line
             dataKey="totalAmount"
             yAxisId="amount"

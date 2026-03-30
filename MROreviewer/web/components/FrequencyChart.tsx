@@ -37,6 +37,7 @@ interface Bucket {
   normalQty: number;
   advanceQty: number;
   totalQty: number;
+  reviewQty: number;  // 검토 중인 건 수량 (오늘 달에만)
   count: number;
   amount: number;
   hasPurchase: boolean;
@@ -48,6 +49,7 @@ function buildBuckets(
   expectedNextTs: number | null,
   showNormal: boolean,
   showAdvance: boolean,
+  reviewQty: number,
 ): Bucket[] {
   if (!events.length) return [];
 
@@ -82,6 +84,8 @@ function buildBuckets(
   const endD = new Date(Math.max(todayTs, expectedNextTs ?? 0));
   endD.setMonth(endD.getMonth() + 2);
 
+  const todayKey_ = monthKey(new Date(todayTs).getFullYear(), new Date(todayTs).getMonth() + 1);
+
   const buckets: Bucket[] = [];
   const cur = new Date(firstD.getFullYear(), firstD.getMonth(), 1);
   const end = new Date(endD.getFullYear(), endD.getMonth(), 1);
@@ -98,6 +102,7 @@ function buildBuckets(
       normalQty: data?.normalQty ?? 0,
       advanceQty: data?.advanceQty ?? 0,
       totalQty: (data?.normalQty ?? 0) + (data?.advanceQty ?? 0),
+      reviewQty: k === todayKey_ ? reviewQty : 0,
       count: data?.count ?? 0,
       amount: data?.amount ?? 0,
       hasPurchase: !!data,
@@ -134,6 +139,11 @@ function CustomTooltip({ active, payload }: any) {
       ) : (
         <div className="text-gray-400">구매 없음</div>
       )}
+      {d.reviewQty > 0 && (
+        <div className="text-red-600 font-semibold border-t border-gray-100 pt-0.5 mt-0.5">
+          검토 중: {d.reviewQty}개
+        </div>
+      )}
     </div>
   );
 }
@@ -154,7 +164,7 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
     ? lastTs + avgIntervalDays * 24 * 60 * 60 * 1000
     : null;
 
-  const buckets = buildBuckets(events, todayTs, expectedNextTs, showNormal, showAdvance);
+  const buckets = buildBuckets(events, todayTs, expectedNextTs, showNormal, showAdvance, review?.quantity ?? 0);
   const todayKey = tsToMonthKey(todayTs);
   const expectedKey = expectedNextTs ? tsToMonthKey(expectedNextTs) : null;
   const isTooEarly = daysSinceLast !== null && avgIntervalDays > 0 && daysSinceLast < avgIntervalDays * 0.8;
@@ -199,6 +209,13 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
             <span className="w-3 h-3 rounded-sm inline-block" style={{ background: "#f59e0b" }} />
             <span className={showAdvance ? "text-gray-700 font-medium" : "text-gray-400"}>선발주</span>
           </label>
+        )}
+
+        {review && review.quantity > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-sm inline-block border-2 border-red-500" style={{ background: "rgba(220,38,38,0.25)" }} />
+            <span className="text-red-600 font-medium">검토 중</span>
+          </span>
         )}
 
         <span className="flex items-center gap-1 ml-auto">
@@ -253,8 +270,22 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
               fill="#f59e0b"
               opacity={0.85}
               maxBarSize={28}
-              radius={[3, 3, 0, 0]}
+              radius={review?.quantity ? [0, 0, 0, 0] : [3, 3, 0, 0]}
               name="선발주"
+            />
+          )}
+
+          {/* 검토 중인 건 (최상단, 빨간 테두리) */}
+          {review && review.quantity > 0 && (
+            <Bar
+              dataKey="reviewQty"
+              stackId="qty"
+              fill="rgba(220,38,38,0.25)"
+              stroke="#dc2626"
+              strokeWidth={1.5}
+              maxBarSize={28}
+              radius={[3, 3, 0, 0]}
+              name="검토 중"
             />
           )}
 
