@@ -47,6 +47,7 @@ export interface PurchaseEvent {
   year: number;
   spec: string;
   department: string;
+  orderType: "normal" | "advance"; // 일반발주(2*) / 선발주(7*)
 }
 
 export interface Year2026Highlight {
@@ -267,6 +268,7 @@ export function analyzeProduct(
       year: r.year,
       spec: r.spec,
       department: parseDept(r.department).department,
+      orderType: r.orderNumber.startsWith("7") ? "advance" as const : "normal" as const,
     }))
     .filter((e) => e.timestamp > 0)
     .sort((a, b) => a.timestamp - b.timestamp);

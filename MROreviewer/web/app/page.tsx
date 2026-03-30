@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import type { ProductAnalysis, OrderType } from "@/lib/analyze";
+import type { ProductAnalysis } from "@/lib/analyze";
 import type { FuzzyMatch } from "@/lib/fuzzy";
 import type { DeptItem, DeptFilter } from "@/components/DeptFilter";
 import type { ReviewItem } from "@/lib/reviewTypes";
@@ -144,9 +144,6 @@ export default function Home() {
   const [selectedSpec, setSelectedSpec] = useState("");
   const specDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 발주유형 필터
-  const [orderType, setOrderType] = useState<OrderType>("all");
-
   // 검토 중인 구매 건
   const [reviewItem, setReviewItem] = useState<ReviewItem | null>(null);
 
@@ -158,39 +155,37 @@ export default function Home() {
   const handleQueryChange = useCallback((val: string) => {
     setQuery(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (val.trim().length < 2) { setSuggestions({ exact: [], similar: [] }); return; }
+    const norm = val.replace(/\s+/g, " ").trim();
+    if (norm.length < 2) { setSuggestions({ exact: [], similar: [] }); setShowSuggestions(false); return; }
     debounceRef.current = setTimeout(async () => {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(val.trim())}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(norm)}`);
       const data = await res.json();
       setSuggestions(data);
       setShowSuggestions(true);
-    }, 300);
+    }, 200);
   }, []);
 
   // 필터 → API 파라미터 변환
-  const buildFilterParams = useCallback((f: DeptFilter, spec?: string, ot?: OrderType) => {
+  const buildFilterParams = useCallback((f: DeptFilter, spec?: string) => {
     const p = new URLSearchParams();
     if (f.dept)         p.set("dept",    f.dept);
     else if (f.damdang) p.set("damdang", f.damdang);
     else if (f.bonbu)   p.set("bonbu",   f.bonbu);
     if (spec)           p.set("spec",    spec);
-    const effectiveOt = ot ?? orderType;
-    if (effectiveOt !== "all") p.set("orderType", effectiveOt);
     return p;
-  }, [orderType]);
+  }, []);
 
   // 상품 분석 실행
-  const searchProduct = useCallback(async (name: string, f?: DeptFilter, spec?: string, ot?: OrderType) => {
+  const searchProduct = useCallback(async (name: string, f?: DeptFilter, spec?: string) => {
     setQuery(name);
     setShowSuggestions(false);
     setLoading(true);
     setError("");
-    setAnalysis(null);
     if (spec === undefined) setSelectedSpec("");
     try {
       const url = new URL("/api/product", window.location.origin);
       url.searchParams.set("name", name);
-      const fp = buildFilterParams(f ?? deptFilter, spec ?? selectedSpec, ot);
+      const fp = buildFilterParams(f ?? deptFilter, spec ?? selectedSpec);
       fp.forEach((v, k) => url.searchParams.set(k, v));
       const res = await fetch(url.toString());
       const data = await res.json();
@@ -207,18 +202,12 @@ export default function Home() {
     if (e.key === "Enter" && query.trim()) searchProduct(query.trim());
   };
 
-  // 부서 필터 변경 시 재조회
+  // 부서 필터 변경 시 재조회 (검토입력 유지)
   const handleFilterChange = useCallback((f: DeptFilter) => {
     setDeptFilter(f);
     setSelectedSpec("");
     if (query.trim() && analysis) searchProduct(query.trim(), f, "");
   }, [query, analysis, searchProduct]);
-
-  // 발주유형 변경 시 재조회
-  const handleOrderTypeChange = useCallback((ot: OrderType) => {
-    setOrderType(ot);
-    if (query.trim() && analysis) searchProduct(query.trim(), deptFilter, selectedSpec, ot);
-  }, [query, analysis, deptFilter, selectedSpec, searchProduct]);
 
   // 규격 입력 변경 시 300ms 디바운스 재조회
   const handleSpecChange = useCallback((spec: string) => {
@@ -307,29 +296,6 @@ export default function Home() {
             onChange={handleFilterChange}
           />
 
-          {/* 발주유형 필터 */}
-          <div className="flex items-center gap-4 px-1">
-            <span className="text-xs text-gray-500 font-medium shrink-0">발주유형</span>
-            {([
-              ["all",     "전체"],
-              ["normal",  "일반발주 (2*)"],
-              ["advance", "선발주 (7*)"],
-            ] as [OrderType, string][]).map(([val, label]) => (
-              <label key={val} className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="orderType"
-                  checked={orderType === val}
-                  onChange={() => handleOrderTypeChange(val)}
-                  className="w-3.5 h-3.5 accent-[#00733C]"
-                />
-                <span className={`text-xs ${orderType === val ? "text-[#00733C] font-semibold" : "text-gray-500"}`}>
-                  {label}
-                </span>
-              </label>
-            ))}
-          </div>
-
           {/* 규격 검색 (검색 결과 있을 때만) */}
           {analysis && analysis.uniqueSpecs.length > 0 && (
             <SpecSearchInput
@@ -358,11 +324,6 @@ export default function Home() {
                 {deptFilter.dept && (
                   <span className="text-xs bg-gray-100 text-gray-600 border border-gray-200 rounded-full px-2.5 py-0.5 shrink-0">
                     {depts.find((d) => d.full === deptFilter.dept)?.team ?? deptFilter.dept}
-                  </span>
-                )}
-                {orderType !== "all" && (
-                  <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded-full px-2.5 py-0.5 shrink-0">
-                    {orderType === "normal" ? "일반발주" : "선발주"}
                   </span>
                 )}
                 {selectedSpec && (
@@ -418,6 +379,8 @@ export default function Home() {
                   data={analysis.monthlyTrend}
                   events={analysis.purchaseEvents}
                   review={reviewItem}
+                  avgIntervalDays={analysis.avgIntervalDays}
+                  lastPurchaseDate={analysis.lastPurchaseDate}
                 />
               </Section>
 

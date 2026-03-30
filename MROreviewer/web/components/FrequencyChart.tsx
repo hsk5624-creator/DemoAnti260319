@@ -1,7 +1,8 @@
 "use client";
+import { useState } from "react";
 import {
-  ComposedChart, Bar, Cell, XAxis, YAxis, CartesianGrid,
-  Tooltip, ReferenceLine, ResponsiveContainer,
+  ComposedChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ReferenceLine, ResponsiveContainer, Legend,
 } from "recharts";
 import { PurchaseEvent } from "@/lib/analyze";
 import { ReviewItem } from "@/lib/reviewTypes";
@@ -13,12 +14,6 @@ interface Props {
   review?: ReviewItem | null;
 }
 
-const YEAR_COLOR: Record<number, string> = {
-  2024: "#86c9a8",
-  2025: "#00733C",
-  2026: "#f59e0b",
-};
-
 function parseTs(dateStr: string): number {
   const m = dateStr.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
   if (!m) return 0;
@@ -29,7 +24,6 @@ function monthKey(year: number, month: number) {
   return `${year}.${String(month).padStart(2, "0")}`;
 }
 
-// 축 표시용: 1월이면 "'YY.01", 나머지는 "MM"
 function tickLabel(key: string) {
   const [y, m] = key.split(".");
   if (m === "01") return `'${y.slice(2)}.01`;
@@ -37,27 +31,53 @@ function tickLabel(key: string) {
 }
 
 interface Bucket {
-  key: string;        // "2024.01" — 유니크 (x축 dataKey)
+  key: string;
   year: number;
   month: number;
-  qty: number;
+  normalQty: number;
+  advanceQty: number;
+  totalQty: number;
   count: number;
   amount: number;
   hasPurchase: boolean;
 }
 
-function buildBuckets(events: PurchaseEvent[], todayTs: number, expectedNextTs: number | null): Bucket[] {
+function buildBuckets(
+  events: PurchaseEvent[],
+  todayTs: number,
+  expectedNextTs: number | null,
+  showNormal: boolean,
+  showAdvance: boolean,
+): Bucket[] {
   if (!events.length) return [];
 
-  const map = new Map<string, { qty: number; count: number; amount: number }>();
-  for (const e of events) {
+  // 체크박스 필터 적용
+  const filtered = events.filter((e) =>
+    (showNormal && e.orderType === "normal") ||
+    (showAdvance && e.orderType === "advance")
+  );
+
+  const map = new Map<string, { normalQty: number; advanceQty: number; count: number; amount: number }>();
+  for (const e of filtered) {
     const d = new Date(e.timestamp);
     const k = monthKey(d.getFullYear(), d.getMonth() + 1);
     const ex = map.get(k);
-    if (ex) { ex.qty += e.quantity; ex.count += 1; ex.amount += e.amount; }
-    else map.set(k, { qty: e.quantity, count: 1, amount: e.amount });
+    if (ex) {
+      if (e.orderType === "normal") ex.normalQty += e.quantity;
+      else ex.advanceQty += e.quantity;
+      ex.count += 1;
+      ex.amount += e.amount;
+    } else {
+      map.set(k, {
+        normalQty: e.orderType === "normal" ? e.quantity : 0,
+        advanceQty: e.orderType === "advance" ? e.quantity : 0,
+        count: 1,
+        amount: e.amount,
+      });
+    }
   }
 
+  // 전체 이벤트 기준으로 범위 계산 (필터와 무관하게)
   const firstD = new Date(events[0].timestamp);
   const endD = new Date(Math.max(todayTs, expectedNextTs ?? 0));
   endD.setMonth(endD.getMonth() + 2);
@@ -75,7 +95,9 @@ function buildBuckets(events: PurchaseEvent[], todayTs: number, expectedNextTs: 
       key: k,
       year: y,
       month: mo,
-      qty: data?.qty ?? 0,
+      normalQty: data?.normalQty ?? 0,
+      advanceQty: data?.advanceQty ?? 0,
+      totalQty: (data?.normalQty ?? 0) + (data?.advanceQty ?? 0),
       count: data?.count ?? 0,
       amount: data?.amount ?? 0,
       hasPurchase: !!data,
@@ -100,8 +122,13 @@ function CustomTooltip({ active, payload }: any) {
       <div className="font-semibold text-gray-700">{d.key}</div>
       {d.hasPurchase ? (
         <>
-          <div className="text-gray-600">수량: <span className="font-medium">{d.qty}개</span></div>
-          <div className="text-gray-600">건수: <span className="font-medium">{d.count}건</span></div>
+          {d.normalQty > 0 && (
+            <div className="text-gray-600">일반발주: <span className="font-medium">{d.normalQty}개</span></div>
+          )}
+          {d.advanceQty > 0 && (
+            <div className="text-gray-600">선발주: <span className="font-medium">{d.advanceQty}개</span></div>
+          )}
+          <div className="text-gray-600">합계: <span className="font-medium">{d.totalQty}개 · {d.count}건</span></div>
           <div className="text-gray-600">금액: <span className="font-medium">{d.amount.toLocaleString()}원</span></div>
         </>
       ) : (
@@ -112,7 +139,13 @@ function CustomTooltip({ active, payload }: any) {
 }
 
 export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDate, review }: Props) {
+  const [showNormal, setShowNormal] = useState(true);
+  const [showAdvance, setShowAdvance] = useState(true);
+
   if (!events.length) return <p className="text-gray-400 text-sm">데이터 없음</p>;
+
+  const hasNormal = events.some((e) => e.orderType === "normal");
+  const hasAdvance = events.some((e) => e.orderType === "advance");
 
   const todayTs = Date.now();
   const lastTs = lastPurchaseDate ? parseTs(lastPurchaseDate) : 0;
@@ -121,25 +154,53 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
     ? lastTs + avgIntervalDays * 24 * 60 * 60 * 1000
     : null;
 
-  const buckets = buildBuckets(events, todayTs, expectedNextTs);
+  const buckets = buildBuckets(events, todayTs, expectedNextTs, showNormal, showAdvance);
   const todayKey = tsToMonthKey(todayTs);
   const expectedKey = expectedNextTs ? tsToMonthKey(expectedNextTs) : null;
   const isTooEarly = daysSinceLast !== null && avgIntervalDays > 0 && daysSinceLast < avgIntervalDays * 0.8;
 
-  const totalPurchaseDays = [...new Set(events.map((e) => e.orderDate))].length;
+  const totalPurchaseDays = [...new Set(
+    events
+      .filter((e) =>
+        (showNormal && e.orderType === "normal") ||
+        (showAdvance && e.orderType === "advance")
+      )
+      .map((e) => e.orderDate)
+  )].length;
+
+  // 예상 다음 구매가 차트 범위 밖인지 확인
+  const expectedOutOfRange = expectedKey && !buckets.some((b) => b.key === expectedKey);
 
   return (
     <div className="space-y-4">
-      {/* 범례 */}
-      <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-        {[2024, 2025, 2026].map((y) =>
-          buckets.some((b) => b.year === y && b.hasPurchase) ? (
-            <span key={y} className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm inline-block" style={{ background: YEAR_COLOR[y] }} />
-              {y}년
-            </span>
-          ) : null
+      {/* 범례 + 체크박스 */}
+      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+        {/* 발주유형 체크박스 */}
+        {hasNormal && (
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showNormal}
+              onChange={(e) => setShowNormal(e.target.checked)}
+              className="w-3.5 h-3.5 accent-[#00733C] rounded"
+            />
+            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: "#00733C" }} />
+            <span className={showNormal ? "text-gray-700 font-medium" : "text-gray-400"}>일반발주</span>
+          </label>
         )}
+        {hasAdvance && (
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showAdvance}
+              onChange={(e) => setShowAdvance(e.target.checked)}
+              className="w-3.5 h-3.5 accent-[#f59e0b] rounded"
+            />
+            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: "#f59e0b" }} />
+            <span className={showAdvance ? "text-gray-700 font-medium" : "text-gray-400"}>선발주</span>
+          </label>
+        )}
+
         <span className="flex items-center gap-1 ml-auto">
           <span className="w-6 border-t-2 border-dashed border-red-500 inline-block" />
           현재
@@ -169,16 +230,33 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
             label={{ value: "수량", angle: -90, position: "insideLeft", fill: "#9ca3af", fontSize: 11 }}
           />
           <Tooltip content={<CustomTooltip />} />
+          <Legend content={() => null} />
 
-          <Bar dataKey="qty" maxBarSize={28} radius={[3, 3, 0, 0]}>
-            {buckets.map((b, i) => (
-              <Cell
-                key={i}
-                fill={b.hasPurchase ? (YEAR_COLOR[b.year] ?? "#86c9a8") : "transparent"}
-                opacity={b.hasPurchase ? 0.85 : 0}
-              />
-            ))}
-          </Bar>
+          {/* 일반발주 (하단) */}
+          {showNormal && (
+            <Bar
+              dataKey="normalQty"
+              stackId="qty"
+              fill="#00733C"
+              opacity={0.85}
+              maxBarSize={28}
+              radius={showAdvance ? [0, 0, 0, 0] : [3, 3, 0, 0]}
+              name="일반발주"
+            />
+          )}
+
+          {/* 선발주 (상단) */}
+          {showAdvance && (
+            <Bar
+              dataKey="advanceQty"
+              stackId="qty"
+              fill="#f59e0b"
+              opacity={0.85}
+              maxBarSize={28}
+              radius={[3, 3, 0, 0]}
+              name="선발주"
+            />
+          )}
 
           {/* 현재 (빨간선) */}
           <ReferenceLine
@@ -190,22 +268,35 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
           />
 
           {/* 예상 다음 구매 시점 */}
-          {expectedKey && expectedKey !== todayKey && (
+          {expectedKey && !expectedOutOfRange && (
             <ReferenceLine
               x={expectedKey}
               stroke="#00733C"
               strokeWidth={2}
               strokeDasharray="6 3"
               label={{
-                value: `▼ 예상(${avgIntervalDays}일)`,
+                value: expectedKey === todayKey
+                  ? `◀ 예상(이번달)`
+                  : `▼ 예상(${avgIntervalDays}일)`,
                 fill: "#00733C",
                 fontSize: 10,
-                position: "insideTopLeft",
+                position: expectedKey === todayKey ? "insideTopLeft" : "insideTopLeft",
               }}
             />
           )}
         </ComposedChart>
       </ResponsiveContainer>
+
+      {/* 예상 다음 구매가 차트 범위 밖일 때 안내 */}
+      {expectedOutOfRange && expectedNextTs && (
+        <div className="text-xs bg-green-50 border border-[#b3d9c6] rounded-lg px-3 py-2 text-[#00733C] flex items-center gap-2">
+          <span>▶</span>
+          <span>
+            예상 다음 구매: <strong>{new Date(expectedNextTs).toLocaleDateString("ko-KR")}</strong>
+            {" "}(평균 주기 {avgIntervalDays}일) — 차트 범위 밖
+          </span>
+        </div>
+      )}
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">

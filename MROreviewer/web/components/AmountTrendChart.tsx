@@ -10,6 +10,8 @@ interface Props {
   data: MonthlyPoint[];
   events: PurchaseEvent[];
   review?: ReviewItem | null;
+  avgIntervalDays?: number;
+  lastPurchaseDate?: string;
 }
 
 const BAR_COLOR: Record<number, string> = { 2024: "#86c9a8", 2025: "#00733C", 2026: "#f59e0b" };
@@ -38,16 +40,27 @@ interface Bucket {
   hasPurchase: boolean;
 }
 
-function buildBuckets(data: MonthlyPoint[], events: PurchaseEvent[]): Bucket[] {
+function parseTs(dateStr: string): number {
+  const m = dateStr.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+  if (!m) return 0;
+  return new Date(`${m[1]}-${m[2]}-${m[3]}`).getTime();
+}
+
+function buildBuckets(
+  data: MonthlyPoint[],
+  events: PurchaseEvent[],
+  expectedNextTs: number | null,
+): Bucket[] {
   const map = new Map<string, MonthlyPoint>();
   for (const d of data) map.set(d.label, d);
 
-  // 범위: 이벤트 첫 달 ~ 오늘+1달
+  // 범위: 이벤트 첫 달 ~ max(오늘, 예상다음구매)+2달
   const allTs = events.map((e) => e.timestamp);
   allTs.push(Date.now());
+  if (expectedNextTs) allTs.push(expectedNextTs);
   const minD = new Date(Math.min(...allTs));
   const maxD = new Date(Math.max(...allTs));
-  maxD.setMonth(maxD.getMonth() + 1);
+  maxD.setMonth(maxD.getMonth() + 2);
 
   const buckets: Bucket[] = [];
   const cur = new Date(minD.getFullYear(), minD.getMonth(), 1);
@@ -91,10 +104,19 @@ function CustomTooltip({ active, payload }: any) {
   );
 }
 
-export default function AmountTrendChart({ data, events, review }: Props) {
+export default function AmountTrendChart({ data, events, review, avgIntervalDays, lastPurchaseDate }: Props) {
   if (!data.length) return <p className="text-gray-400 text-sm">데이터 없음</p>;
 
-  const buckets = buildBuckets(data, events);
+  // 예상 다음 구매 시점
+  const lastTs = lastPurchaseDate ? parseTs(lastPurchaseDate) : 0;
+  const expectedNextTs = lastTs && avgIntervalDays && avgIntervalDays > 0
+    ? lastTs + avgIntervalDays * 24 * 60 * 60 * 1000
+    : null;
+  const expectedKey = expectedNextTs
+    ? monthKey(new Date(expectedNextTs).getFullYear(), new Date(expectedNextTs).getMonth() + 1)
+    : null;
+
+  const buckets = buildBuckets(data, events, expectedNextTs);
 
   // 과거 월평균 금액 (구매 있는 달만)
   const historyData = buckets.filter((b) => b.year !== 2026 && b.hasPurchase);
@@ -126,6 +148,12 @@ export default function AmountTrendChart({ data, events, review }: Props) {
           <span className="w-6 border-t-2 border-dashed border-red-500 inline-block" />
           현재
         </span>
+        {expectedKey && (
+          <span className="flex items-center gap-1">
+            <span className="w-6 border-t-2 border-dashed border-[#00733C] inline-block" />
+            예상 다음 구매
+          </span>
+        )}
       </div>
 
       <ResponsiveContainer width="100%" height={270}>
@@ -186,6 +214,25 @@ export default function AmountTrendChart({ data, events, review }: Props) {
             strokeDasharray="4 2"
             label={{ value: "▼ 현재", fill: "#ef4444", fontSize: 10, position: "insideTopRight" }}
           />
+
+          {/* 예상 다음 구매 시점 */}
+          {expectedKey && (
+            <ReferenceLine
+              x={expectedKey}
+              yAxisId="amount"
+              stroke="#00733C"
+              strokeWidth={2}
+              strokeDasharray="6 3"
+              label={{
+                value: expectedKey === todayKey
+                  ? `◀ 예상(이번달)`
+                  : `▼ 예상(${avgIntervalDays}일)`,
+                fill: "#00733C",
+                fontSize: 10,
+                position: "insideTopLeft",
+              }}
+            />
+          )}
 
           <Bar dataKey="count" yAxisId="count" maxBarSize={28} radius={[3, 3, 0, 0]}>
             {buckets.map((b, i) => (
