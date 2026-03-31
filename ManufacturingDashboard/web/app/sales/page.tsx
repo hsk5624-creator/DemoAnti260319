@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import SuggestionBoard from '@/components/SuggestionBoard';
 import { SalesFile, SalesFileMeta, SalesRow } from '@/lib/salesTypes';
 import { parseSalesFile } from '@/lib/parseSalesExcel';
 import {
@@ -51,6 +52,7 @@ export default function SalesDashboard() {
   const [loadingLabel, setLoadingLabel] = useState<string | null>(null); // 현재 파싱 중
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSuggestion, setShowSuggestion] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -279,9 +281,17 @@ export default function SalesDashboard() {
             {error && (
               <p className="text-xs text-red-400 bg-red-400/10 px-3 py-1.5 rounded-lg">{error}</p>
             )}
+            <button
+              onClick={() => setShowSuggestion(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+              개선 제안
+            </button>
           </div>
         </div>
       </header>
+      <SuggestionBoard page="sales" pageLabel="매출" open={showSuggestion} onClose={() => setShowSuggestion(false)} />
 
       <main className="max-w-screen-2xl mx-auto px-6 py-6 space-y-6">
         <SalesFileManager

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import SuggestionBoard from '@/components/SuggestionBoard';
 import {
   ComposedChart, Bar, Line, LabelList,
   XAxis, YAxis, CartesianGrid,
@@ -420,6 +421,7 @@ export default function UtilizationDashboard() {
   const [loading, setLoading]   = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showSuggestion, setShowSuggestion] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 서버 파일 메타데이터만 빠르게 로드 (XLSX 파싱 없음)
@@ -626,9 +628,17 @@ export default function UtilizationDashboard() {
             {uploadError && (
               <p className="text-xs text-red-400 bg-red-400/10 px-3 py-1.5 rounded-lg">{uploadError}</p>
             )}
+            <button
+              onClick={() => setShowSuggestion(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+              개선 제안
+            </button>
           </div>
         </div>
       </header>
+      <SuggestionBoard page="utilization" pageLabel="가동률" open={showSuggestion} onClose={() => setShowSuggestion(false)} />
 
       <main className="max-w-screen-2xl mx-auto px-6 py-6 space-y-5">
 

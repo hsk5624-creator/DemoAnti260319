@@ -2,11 +2,12 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import SuggestionBoard from '@/components/SuggestionBoard';
 import { ActualFile, PlanRow } from '@/lib/types';
 import { parseActualFile, parsePlanFile } from '@/lib/parseExcel';
 import {
   getKpiSummary, aggregateByGroup, aggregateByAccount,
-  buildCumulativeData, getMonthlyBalanceItems,
+  buildCumulativeData, getMonthlyBalanceItems, applyPlanData,
   GroupSummary, AccountSummary, MonthlyPoint, KpiSummary, BalanceItem,
 } from '@/lib/aggregate';
 import FileManager from '@/components/FileManager';
@@ -29,6 +30,7 @@ export default function BudgetDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBalanceModal, setShowBalanceModal] = useState(false);
+  const [showSuggestion, setShowSuggestion] = useState(false);
 
   useEffect(() => {
     try {
@@ -107,10 +109,14 @@ export default function BudgetDashboard() {
   let balanceItems: BalanceItem[] = [];
 
   if (selectedFile) {
-    kpi = getKpiSummary(selectedFile.rows);
-    groups = aggregateByGroup(selectedFile.rows);
-    accounts = aggregateByAccount(selectedFile.rows);
-    balanceItems = getMonthlyBalanceItems(selectedFile.rows);
+    // 연간 사업계획 파일이 있으면 해당 월 계획값으로 totalPlanM 교체
+    const effectiveRows = planRows.length > 0
+      ? applyPlanData(selectedFile.rows, planRows, selectedFile.month)
+      : selectedFile.rows;
+    kpi = getKpiSummary(effectiveRows);
+    groups = aggregateByGroup(effectiveRows);
+    accounts = aggregateByAccount(effectiveRows);
+    balanceItems = getMonthlyBalanceItems(effectiveRows);
   }
   if (planRows.length > 0 && selectedFile) {
     cumulData = buildCumulativeData(planRows, selectedFile.month);
@@ -141,9 +147,17 @@ export default function BudgetDashboard() {
             {error && (
               <p className="text-xs text-red-400 bg-red-400/10 px-3 py-1.5 rounded-lg">{error}</p>
             )}
+            <button
+              onClick={() => setShowSuggestion(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+              개선 제안
+            </button>
           </div>
         </div>
       </header>
+      <SuggestionBoard page="budget" pageLabel="운영예산" open={showSuggestion} onClose={() => setShowSuggestion(false)} />
 
       <main className="max-w-screen-2xl mx-auto px-6 py-6 space-y-6">
         <FileManager

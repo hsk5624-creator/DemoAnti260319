@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+import LogoutButton from '@/components/LogoutButton';
 
 const DASHBOARDS = [
   {
@@ -39,71 +41,104 @@ const COLOR_MAP: Record<string, { border: string; iconBg: string; tag: string; b
   violet:  { border: 'hover:border-violet-500/60',  iconBg: 'bg-violet-500/10',  tag: 'bg-violet-500/10 text-violet-300',  badge: 'bg-violet-500/20 text-violet-300' },
 };
 
-export default function Home() {
+async function getMembers() {
+  const { data } = await supabase
+    .from('users')
+    .select('id, name, created_at')
+    .order('created_at', { ascending: true });
+  return data ?? [];
+}
+
+export default async function Home() {
+  const members = await getMembers();
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
       <header className="border-b border-slate-700 bg-slate-800/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-screen-xl mx-auto px-6 py-4">
-          <h1 className="text-lg font-bold text-white">제조부문 경영 대시보드</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Manufacturing Management Dashboard</p>
+        <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-white">제조부문 경영 대시보드</h1>
+            <p className="text-xs text-slate-400 mt-0.5">Manufacturing Management Dashboard</p>
+          </div>
+          <LogoutButton />
         </div>
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-6 py-12">
-        <div className="mb-8">
-          <h2 className="text-sm font-semibold text-slate-400 tracking-wide uppercase">대시보드 선택</h2>
-          <p className="text-xs text-slate-600 mt-1">원하는 대시보드를 선택하세요</p>
-        </div>
+      <main className="max-w-screen-xl mx-auto px-6 py-12 space-y-12">
+        {/* 대시보드 카드 */}
+        <section>
+          <div className="mb-8">
+            <h2 className="text-sm font-semibold text-slate-400 tracking-wide uppercase">대시보드 선택</h2>
+            <p className="text-xs text-slate-600 mt-1">원하는 대시보드를 선택하세요</p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {DASHBOARDS.map((d) => {
-            const c = COLOR_MAP[d.color];
-            return (
-              <Link
-                key={d.href}
-                href={d.href}
-                className={`group bg-slate-800 border border-slate-700 ${c.border} rounded-2xl p-6 flex flex-col gap-4 transition-all duration-200 hover:bg-slate-750 hover:shadow-xl hover:-translate-y-0.5`}
-              >
-                {/* 아이콘 + 상태 */}
-                <div className="flex items-start justify-between">
-                  <div className={`w-12 h-12 rounded-xl ${c.iconBg} flex items-center justify-center text-2xl`}>
-                    {d.icon}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {DASHBOARDS.map((d) => {
+              const c = COLOR_MAP[d.color];
+              return (
+                <Link
+                  key={d.href}
+                  href={d.href}
+                  className={`group bg-slate-800 border border-slate-700 ${c.border} rounded-2xl p-6 flex flex-col gap-4 transition-all duration-200 hover:bg-slate-750 hover:shadow-xl hover:-translate-y-0.5`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className={`w-12 h-12 rounded-xl ${c.iconBg} flex items-center justify-center text-2xl`}>
+                      {d.icon}
+                    </div>
+                    {d.ready ? (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${c.badge}`}>운영중</span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">준비중</span>
+                    )}
                   </div>
-                  {d.ready ? (
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${c.badge}`}>운영중</span>
-                  ) : (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">준비중</span>
-                  )}
-                </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-100 group-hover:text-white transition-colors leading-snug">
+                      {d.title}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">{d.titleEn}</p>
+                  </div>
+                  <p className="text-sm text-slate-400 leading-relaxed flex-1">{d.description}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {d.tags.map((tag) => (
+                      <span key={tag} className={`text-[11px] px-2 py-0.5 rounded-full ${c.tag}`}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-end text-xs text-slate-500 group-hover:text-slate-300 transition-colors">
+                    {d.ready ? '대시보드 열기' : '준비 중'} →
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
 
-                {/* 제목 */}
-                <div>
-                  <h3 className="text-base font-bold text-slate-100 group-hover:text-white transition-colors leading-snug">
-                    {d.title}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{d.titleEn}</p>
-                </div>
+        {/* 멤버 목록 */}
+        <section>
+          <div className="mb-5">
+            <h2 className="text-sm font-semibold text-slate-400 tracking-wide uppercase">멤버</h2>
+            <p className="text-xs text-slate-600 mt-1">가입된 회원 {members.length}명</p>
+          </div>
 
-                {/* 설명 */}
-                <p className="text-sm text-slate-400 leading-relaxed flex-1">{d.description}</p>
-
-                {/* 태그 */}
-                <div className="flex flex-wrap gap-1.5">
-                  {d.tags.map((tag) => (
-                    <span key={tag} className={`text-[11px] px-2 py-0.5 rounded-full ${c.tag}`}>
-                      {tag}
-                    </span>
-                  ))}
+          {members.length === 0 ? (
+            <p className="text-sm text-slate-600">아직 가입된 멤버가 없습니다.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {members.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2"
+                >
+                  <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
+                    {m.name.charAt(0)}
+                  </div>
+                  <span className="text-sm text-slate-200">{m.name}</span>
                 </div>
-
-                {/* 진입 링크 */}
-                <div className="flex items-center justify-end text-xs text-slate-500 group-hover:text-slate-300 transition-colors">
-                  {d.ready ? '대시보드 열기' : '준비 중'} →
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

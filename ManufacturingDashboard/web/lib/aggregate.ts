@@ -1,6 +1,24 @@
 import { ActualRow, PlanRow } from './types';
 import { EXCLUDED_CODES, ORG_GROUPS } from './orgChart';
 
+/**
+ * 연간 사업계획 파일의 해당 월 계획값으로 actualRows의 totalPlanM을 교체한다.
+ * 매칭 키: deptCode + accountCode + wbsCode
+ */
+export function applyPlanData(actualRows: ActualRow[], planRows: PlanRow[], month: number): ActualRow[] {
+  const lookup = new Map<string, number>();
+  for (const p of planRows) {
+    const key = `${p.deptCode}__${p.accountCode}__${p.wbsCode}`;
+    const prev = lookup.get(key) ?? 0;
+    lookup.set(key, prev + (p.monthly[month - 1]?.plan ?? 0));
+  }
+  return actualRows.map((r) => {
+    const key = `${r.deptCode}__${r.accountCode}__${r.wbsCode}`;
+    const planM = lookup.has(key) ? lookup.get(key)! : 0;
+    return { ...r, totalPlanM: planM };
+  });
+}
+
 export function filterTeamRows(rows: ActualRow[]): ActualRow[] {
   return rows.filter((r) => !EXCLUDED_CODES.has(r.deptCode));
 }

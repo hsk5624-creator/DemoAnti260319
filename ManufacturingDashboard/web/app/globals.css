@@ -25,3 +25,86 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
+
+/* Login success animations */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes draw-check {
+  0%   { stroke-dashoffset: 30; opacity: 0; }
+  40%  { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+@keyframes ping-slow {
+  0%   { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes progress {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out both;
+}
+.animate-scale-in {
+  animation: scale-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+}
+.animate-draw-check {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: draw-check 0.5s ease-out 0.5s both;
+}
+.animate-ping-slow {
+  animation: ping-slow 1.2s ease-out 0.3s infinite;
+}
+.animate-progress {
+  animation: progress 1.6s ease-in-out 0.2s both;
+}
+
+/* Blue splash wave-out */
+@keyframes splash-wave-out {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.06); filter: brightness(1.25) saturate(1.4); }
+  35%  { opacity: 0.85; transform: translate(-50%, -50%) scale(0.96); filter: brightness(0.85) saturate(0.9); }
+  55%  { opacity: 0.55; transform: translate(-50%, -50%) scale(1.03); filter: brightness(1.1); }
+  75%  { opacity: 0.25; transform: translate(-50%, -50%) scale(0.98); }
+  100% { opacity: 0;    transform: translate(-50%, -50%) scale(1.08); }
+}
+.animate-splash-wave-out {
+  animation: splash-wave-out 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Ripple rings */
+@keyframes ripple-ring {
+  0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0.6; }
+  100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
+}
+.animate-ripple-1 { animation: ripple-ring 0.9s ease-out 0s forwards; }
+.animate-ripple-2 { animation: ripple-ring 0.9s ease-out 0.15s forwards; }
+.animate-ripple-3 { animation: ripple-ring 0.9s ease-out 0.3s forwards; }
+
+/* Dark wave fill — dashboard color expands from center */
+@keyframes dark-fill-expand {
+  0%   { transform: translate(-50%, -50%) scale(0); }
+  75%  { transform: translate(-50%, -50%) scale(1.03); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+.animate-dark-fill-expand {
+  animation: dark-fill-expand 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Dark ripple rings — wave front ahead of the fill */
+@keyframes dark-ripple-ring {
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: 0.55; }
+  100% { transform: translate(-50%, -50%) scale(1.25); opacity: 0; }
+}
+.animate-dark-ripple-1 { animation: dark-ripple-ring 1.4s ease-out 0.06s forwards; }
+.animate-dark-ripple-2 { animation: dark-ripple-ring 1.4s ease-out 0.26s forwards; }
+.animate-dark-ripple-3 { animation: dark-ripple-ring 1.4s ease-out 0.46s forwards; }
