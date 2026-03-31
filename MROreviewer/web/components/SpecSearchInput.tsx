@@ -1,94 +1,129 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 
 interface Props {
-  specs: string[];       // 이 상품에 존재하는 규격 목록
-  value: string;         // 현재 입력값
-  onChange: (val: string) => void;
+  specs: string[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
 }
 
-export default function SpecSearchInput({ specs, value, onChange }: Props) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
+export default function SpecSearchInput({ specs, selected, onChange }: Props) {
+  const [search, setSearch] = useState("");
 
-  // 입력값 포함 규격 필터링
-  const suggestions = useMemo(() => {
-    const q = value.trim().toLowerCase();
-    if (!q) return specs;
-    return specs.filter((s) => s.toLowerCase().includes(q));
-  }, [specs, value]);
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? specs.filter((s) => s.toLowerCase().includes(q)) : specs;
+  }, [specs, search]);
 
-  // 바깥 클릭 시 드롭다운 닫기
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+  const allVisibleSelected = visible.length > 0 && visible.every((s) => selected.has(s));
+
+  const toggle = (spec: string) => {
+    const next = new Set(selected);
+    if (next.has(spec)) next.delete(spec);
+    else next.add(spec);
+    onChange(next);
+  };
+
+  const toggleAllVisible = () => {
+    const next = new Set(selected);
+    if (allVisibleSelected) {
+      visible.forEach((s) => next.delete(s));
+    } else {
+      visible.forEach((s) => next.add(s));
     }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, []);
+    onChange(next);
+  };
+
+  const clearAll = () => onChange(new Set());
 
   if (!specs.length) return null;
 
   return (
-    <div ref={wrapRef} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-1 h-4 rounded-full bg-[#00733C] inline-block" />
-        <h3 className="text-gray-700 font-semibold text-sm">
-          규격 검색
-          <span className="ml-2 text-gray-400 font-normal text-xs">{specs.length}개 규격 존재</span>
-        </h3>
+    <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-[#00733C] inline-block" />
+          <h3 className="text-gray-700 font-semibold text-sm">
+            규격 선택
+            <span className="ml-2 text-gray-400 font-normal text-xs">{specs.length}개 규격</span>
+          </h3>
+        </div>
+        {selected.size > 0 && (
+          <button
+            onClick={clearAll}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            선택 초기화
+          </button>
+        )}
       </div>
 
-      <div className="relative">
+      {/* 검색 입력 */}
+      <div className="relative mb-2">
         <input
           type="text"
-          value={value}
-          onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder="규격 입력 (포함된 문자로 검색)"
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 pr-8
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="규격 검색으로 목록 좁히기…"
+          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-7
             focus:outline-none focus:border-[#00733C] focus:ring-1 focus:ring-[#00733C]
             text-gray-700 placeholder-gray-400"
         />
-        {value && (
+        {search && (
           <button
-            onMouseDown={(e) => { e.preventDefault(); onChange(""); setOpen(false); }}
+            onMouseDown={(e) => { e.preventDefault(); setSearch(""); }}
             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm leading-none"
           >
             ×
           </button>
         )}
+      </div>
 
-        {/* 드롭다운 */}
-        {open && suggestions.length > 0 && (
-          <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200
-            rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
-            {suggestions.map((spec) => (
-              <button
-                key={spec}
-                onMouseDown={(e) => { e.preventDefault(); onChange(spec); setOpen(false); }}
-                className={`w-full text-left px-3 py-2 text-xs hover:bg-green-50 hover:text-[#00733C]
-                  transition-colors border-b border-gray-50 last:border-0
-                  ${value === spec ? "bg-green-50 text-[#00733C] font-medium" : "text-gray-600"}`}
-              >
-                {spec}
-              </button>
-            ))}
-          </div>
+      {/* 전체 선택/해제 행 */}
+      <div className="flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-gray-100">
+        <input
+          type="checkbox"
+          checked={allVisibleSelected}
+          onChange={toggleAllVisible}
+          className="w-3.5 h-3.5 accent-[#00733C] rounded flex-shrink-0"
+        />
+        <span className="text-xs text-gray-500 flex-1">
+          {search ? `검색된 ${visible.length}개 전체` : "전체 선택/해제"}
+        </span>
+        {selected.size > 0 && (
+          <span className="text-xs font-medium text-[#00733C]">{selected.size}개 선택됨</span>
         )}
       </div>
 
-      {value && (
-        <div className="mt-2 text-xs text-gray-400">
-          <span className="text-[#00733C] font-medium">"{value}"</span> 포함 규격으로 필터링 중
-          {suggestions.length < specs.length && (
-            <span className="ml-1">({suggestions.length}/{specs.length}개 해당)</span>
-          )}
-        </div>
-      )}
+      {/* 체크박스 목록 */}
+      <div className="max-h-52 overflow-y-auto">
+        {visible.length === 0 ? (
+          <div className="text-xs text-gray-400 px-2 py-3 text-center">일치하는 규격 없음</div>
+        ) : (
+          visible.map((spec) => (
+            <label
+              key={spec}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-green-50 transition-colors group ${
+                selected.has(spec) ? "bg-green-50/60" : ""
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(spec)}
+                onChange={() => toggle(spec)}
+                className="w-3.5 h-3.5 accent-[#00733C] rounded flex-shrink-0"
+              />
+              <span className={`text-xs leading-snug break-all ${
+                selected.has(spec) ? "text-[#00733C] font-medium" : "text-gray-600 group-hover:text-[#00733C]"
+              }`}>
+                {spec}
+              </span>
+            </label>
+          ))
+        )}
+      </div>
     </div>
   );
 }

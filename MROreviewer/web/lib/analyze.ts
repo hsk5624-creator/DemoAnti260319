@@ -106,7 +106,7 @@ export interface ProductAnalysis {
 
   // 규격 목록 (dept 필터 적용 후, spec 필터 적용 전)
   uniqueSpecs: string[];
-  selectedSpec: string; // 현재 적용된 규격 필터 (없으면 "")
+  selectedSpecs: string[]; // 현재 적용된 규격 필터 목록 (없으면 [])
 }
 
 // ─── 헬퍼 ──────────────────────────────────────────────────
@@ -140,7 +140,7 @@ export function analyzeProduct(
   productName: string,
   records: MRORecord[],
   deptFilter?: string | string[],  // 단일 full 문자열 or 배열(담당/본부 필터), undefined = 전체
-  specFilter?: string,             // 규격 contains match, undefined = 전체
+  specFilter?: string[],           // 규격 exact match 목록, undefined = 전체
   orderType?: OrderType            // 발주유형: all=전체, normal=일반(2), advance=선발주(7)
 ): ProductAnalysis {
   const byName = records.filter((r) => r.productName === productName);
@@ -158,10 +158,13 @@ export function analyzeProduct(
       : byDept;
 
   // 규격 목록은 dept+발주유형 필터 적용 후, spec 필터 적용 전에 수집
-  const uniqueSpecs = [...new Set(byOrder.map((r) => r.spec).filter(Boolean))].sort();
+  // orderDate가 있는 레코드만 포함 (구매 이력이 없는 규격은 제외)
+  const uniqueSpecs = [...new Set(
+    byOrder.filter((r) => r.orderDate).map((r) => r.spec).filter(Boolean)
+  )].sort();
 
-  const all = specFilter
-    ? byOrder.filter((r) => r.spec.toLowerCase().includes(specFilter.toLowerCase()))
+  const all = specFilter && specFilter.length > 0
+    ? byOrder.filter((r) => specFilter.includes(r.spec))
     : byOrder;
 
   const history = all.filter((r) => r.year === 2024 || r.year === 2025);
@@ -394,7 +397,7 @@ export function analyzeProduct(
     avgHistoryQtyPerPurchase,
     highlights2026,
     uniqueSpecs,
-    selectedSpec: specFilter ?? "",
+    selectedSpecs: specFilter ?? [],
     purchaseEvents,
     avgIntervalDays,
     lastPurchaseDate,

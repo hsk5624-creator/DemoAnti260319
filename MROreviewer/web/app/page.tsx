@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import type { ProductAnalysis } from "@/lib/analyze";
+import type { ProductAnalysis, PurchaseEvent } from "@/lib/analyze";
 import type { FuzzyMatch } from "@/lib/fuzzy";
 import type { DeptItem, DeptFilter } from "@/components/DeptFilter";
 import type { ReviewItem } from "@/lib/reviewTypes";
@@ -141,11 +141,12 @@ export default function Home() {
   const [deptFilter, setDeptFilter] = useState<DeptFilter>({ bonbu: "", damdang: "", dept: "" });
 
   // 규격 검색
-  const [selectedSpec, setSelectedSpec] = useState("");
+  const [selectedSpecs, setSelectedSpecs] = useState<Set<string>>(new Set());
   const specDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 검토 중인 구매 건
   const [reviewItem, setReviewItem] = useState<ReviewItem | null>(null);
+  const [excludedMonths, setExcludedMonths] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/departments").then((r) => r.json()).then(setDepts);
@@ -166,37 +167,37 @@ export default function Home() {
   }, []);
 
   // 필터 → API 파라미터 변환
-  const buildFilterParams = useCallback((f: DeptFilter, spec?: string) => {
+  const buildFilterParams = useCallback((f: DeptFilter, specs?: Set<string>) => {
     const p = new URLSearchParams();
     if (f.dept)         p.set("dept",    f.dept);
     else if (f.damdang) p.set("damdang", f.damdang);
     else if (f.bonbu)   p.set("bonbu",   f.bonbu);
-    if (spec)           p.set("spec",    spec);
+    specs?.forEach((s) => p.append("spec", s));
     return p;
   }, []);
 
   // 상품 분석 실행
-  const searchProduct = useCallback(async (name: string, f?: DeptFilter, spec?: string) => {
+  const searchProduct = useCallback(async (name: string, f?: DeptFilter, specs?: Set<string>) => {
     setQuery(name);
     setShowSuggestions(false);
     setLoading(true);
     setError("");
-    if (spec === undefined) setSelectedSpec("");
+    if (specs === undefined) setSelectedSpecs(new Set());
     try {
       const url = new URL("/api/product", window.location.origin);
       url.searchParams.set("name", name);
-      const fp = buildFilterParams(f ?? deptFilter, spec ?? selectedSpec);
-      fp.forEach((v, k) => url.searchParams.set(k, v));
+      const fp = buildFilterParams(f ?? deptFilter, specs !== undefined ? specs : selectedSpecs);
+      fp.forEach((v, k) => url.searchParams.append(k, v));
       const res = await fetch(url.toString());
       const data = await res.json();
       if (data.error) { setError(data.error); }
-      else { setAnalysis(data); }
+      else { setAnalysis(data); setExcludedMonths(new Set()); }
     } catch {
       setError("데이터 로딩 실패");
     } finally {
       setLoading(false);
     }
-  }, [deptFilter, selectedSpec, buildFilterParams]);
+  }, [deptFilter, selectedSpecs, buildFilterParams]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && query.trim()) searchProduct(query.trim());
@@ -205,17 +206,17 @@ export default function Home() {
   // 부서 필터 변경 시 재조회 (검토입력 유지)
   const handleFilterChange = useCallback((f: DeptFilter) => {
     setDeptFilter(f);
-    setSelectedSpec("");
-    if (query.trim() && analysis) searchProduct(query.trim(), f, "");
+    setSelectedSpecs(new Set());
+    if (query.trim() && analysis) searchProduct(query.trim(), f, new Set());
   }, [query, analysis, searchProduct]);
 
-  // 규격 입력 변경 시 300ms 디바운스 재조회
-  const handleSpecChange = useCallback((spec: string) => {
-    setSelectedSpec(spec);
+  // 규격 체크박스 변경 시 300ms 디바운스 재조회
+  const handleSpecsChange = useCallback((next: Set<string>) => {
+    setSelectedSpecs(next);
     if (specDebounceRef.current) clearTimeout(specDebounceRef.current);
     if (!query.trim() || !analysis) return;
     specDebounceRef.current = setTimeout(() => {
-      searchProduct(query.trim(), deptFilter, spec);
+      searchProduct(query.trim(), deptFilter, next);
     }, 300);
   }, [query, analysis, deptFilter, searchProduct]);
 
@@ -300,8 +301,8 @@ export default function Home() {
           {analysis && analysis.uniqueSpecs.length > 0 && (
             <SpecSearchInput
               specs={analysis.uniqueSpecs}
-              value={selectedSpec}
-              onChange={handleSpecChange}
+              selected={selectedSpecs}
+              onChange={handleSpecsChange}
             />
           )}
 
@@ -331,9 +332,9 @@ export default function Home() {
                     {depts.find((d) => d.full === deptFilter.dept)?.team ?? deptFilter.dept}
                   </span>
                 )}
-                {selectedSpec && (
-                  <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5 shrink-0 max-w-xs truncate" title={selectedSpec}>
-                    규격: {selectedSpec.length > 30 ? selectedSpec.slice(0, 30) + "…" : selectedSpec}
+                {selectedSpecs.size > 0 && (
+                  <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5 shrink-0">
+                    규격 {selectedSpecs.size}개 선택
                   </span>
                 )}
               </div>
@@ -357,13 +358,28 @@ export default function Home() {
               </div>
 
               {/* 단가 요약 */}
-              {analysis.priceStats.avgHistory > 0 && (
-                <div className="grid grid-cols-3 gap-3">
-                  <StatCard label="과거 평균단가" value={`${analysis.priceStats.avgHistory.toLocaleString()}원`} sub="2024~2025" />
-                  <StatCard label="과거 최저/최고" value={`${analysis.priceStats.minHistory.toLocaleString()} ~ ${analysis.priceStats.maxHistory.toLocaleString()}`} />
-                  <StatCard label="월평균 구매수량" value={`${analysis.avgMonthlyQty}개/월`} sub="과거 기준" />
-                </div>
-              )}
+              {analysis.priceStats.avgHistory > 0 && (() => {
+                const excludedHistCount = [...excludedMonths].filter(k => parseInt(k.split(".")[0]) !== 2026).length;
+                const localTotalQty = (analysis.purchaseEvents as PurchaseEvent[])
+                  .filter(e => {
+                    const d = new Date(e.timestamp);
+                    const k = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+                    return e.year !== 2026 && !excludedMonths.has(k);
+                  })
+                  .reduce((s, e) => s + e.quantity, 0);
+                const localAvgMonthlyQty = Math.round((localTotalQty / Math.max(1, 24 - excludedHistCount)) * 10) / 10;
+                return (
+                  <div className="grid grid-cols-3 gap-3">
+                    <StatCard label="과거 평균단가" value={`${analysis.priceStats.avgHistory.toLocaleString()}원`} sub="2024~2025" />
+                    <StatCard label="과거 최저/최고" value={`${analysis.priceStats.minHistory.toLocaleString()} ~ ${analysis.priceStats.maxHistory.toLocaleString()}`} />
+                    <StatCard
+                      label="월평균 구매수량"
+                      value={`${localAvgMonthlyQty}개/월`}
+                      sub={excludedHistCount > 0 ? `${excludedHistCount}개월 제외` : "과거 기준"}
+                    />
+                  </div>
+                );
+              })()}
 
               {/* A) 구매 시점 타임라인 */}
               <Section title="구매 시점별 수량 타임라인">
@@ -372,6 +388,14 @@ export default function Home() {
                   avgIntervalDays={analysis.avgIntervalDays}
                   lastPurchaseDate={analysis.lastPurchaseDate}
                   review={reviewItem}
+                  excludedMonths={excludedMonths}
+                  onToggleMonth={(key) => setExcludedMonths((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  })}
+                  onResetExcluded={() => setExcludedMonths(new Set())}
                 />
               </Section>
 

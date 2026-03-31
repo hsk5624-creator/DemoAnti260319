@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import {
-  ComposedChart, Bar, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Bar, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer, Legend,
 } from "recharts";
 import { PurchaseEvent } from "@/lib/analyze";
@@ -12,6 +12,9 @@ interface Props {
   avgIntervalDays: number;
   lastPurchaseDate: string;
   review?: ReviewItem | null;
+  excludedMonths?: Set<string>;
+  onToggleMonth?: (key: string) => void;
+  onResetExcluded?: () => void;
 }
 
 function parseTs(dateStr: string): number {
@@ -117,6 +120,24 @@ function tsToMonthKey(ts: number) {
   return monthKey(d.getFullYear(), d.getMonth() + 1);
 }
 
+function calcAvgInterval(events: PurchaseEvent[], excluded: Set<string>): number {
+  const histEvents = events.filter((e) => {
+    const d = new Date(e.timestamp);
+    const k = monthKey(d.getFullYear(), d.getMonth() + 1);
+    return e.year !== 2026 && !excluded.has(k);
+  });
+  const dates = [...new Set(histEvents.map((e) => e.orderDate))].sort();
+  if (dates.length < 2) return 0;
+  const intervals: number[] = [];
+  for (let i = 1; i < dates.length; i++) {
+    const diff = (parseTs(dates[i]) - parseTs(dates[i - 1])) / 86400000;
+    if (diff > 0) intervals.push(diff);
+  }
+  return intervals.length > 0
+    ? Math.round(intervals.reduce((s, v) => s + v, 0) / intervals.length)
+    : 0;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
@@ -148,9 +169,12 @@ function CustomTooltip({ active, payload }: any) {
   );
 }
 
-export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDate, review }: Props) {
+export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDate, review, excludedMonths: excludedMonthsProp, onToggleMonth, onResetExcluded }: Props) {
   const [showNormal, setShowNormal] = useState(true);
   const [showAdvance, setShowAdvance] = useState(true);
+
+  const excludedMonths = excludedMonthsProp ?? new Set<string>();
+  const toggleMonth = onToggleMonth ?? (() => {});
 
   if (!events.length) return <p className="text-gray-400 text-sm">데이터 없음</p>;
 
@@ -160,14 +184,20 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
   const todayTs = Date.now();
   const lastTs = lastPurchaseDate ? parseTs(lastPurchaseDate) : 0;
   const daysSinceLast = lastTs ? Math.floor((todayTs - lastTs) / (1000 * 60 * 60 * 24)) : null;
-  const expectedNextTs = lastTs && avgIntervalDays > 0
-    ? lastTs + avgIntervalDays * 24 * 60 * 60 * 1000
+
+  const localAvgIntervalDays = excludedMonths.size > 0
+    ? calcAvgInterval(events, excludedMonths)
+    : avgIntervalDays;
+
+  const expectedNextTs = lastTs && localAvgIntervalDays > 0
+    ? lastTs + localAvgIntervalDays * 24 * 60 * 60 * 1000
     : null;
 
   const buckets = buildBuckets(events, todayTs, expectedNextTs, showNormal, showAdvance, review?.quantity ?? 0);
+  const purchaseMonths = buckets.filter((b) => b.hasPurchase);
   const todayKey = tsToMonthKey(todayTs);
   const expectedKey = expectedNextTs ? tsToMonthKey(expectedNextTs) : null;
-  const isTooEarly = daysSinceLast !== null && avgIntervalDays > 0 && daysSinceLast < avgIntervalDays * 0.8;
+  const isTooEarly = daysSinceLast !== null && localAvgIntervalDays > 0 && daysSinceLast < localAvgIntervalDays * 0.8;
 
   const totalPurchaseDays = [...new Set(
     events
@@ -259,7 +289,11 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
               maxBarSize={28}
               radius={showAdvance ? [0, 0, 0, 0] : [3, 3, 0, 0]}
               name="일반발주"
-            />
+            >
+              {buckets.map((b) => (
+                <Cell key={b.key} opacity={excludedMonths.has(b.key) ? 0.15 : 0.85} />
+              ))}
+            </Bar>
           )}
 
           {/* 선발주 (상단) */}
@@ -272,7 +306,11 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
               maxBarSize={28}
               radius={review?.quantity ? [0, 0, 0, 0] : [3, 3, 0, 0]}
               name="선발주"
-            />
+            >
+              {buckets.map((b) => (
+                <Cell key={b.key} opacity={excludedMonths.has(b.key) ? 0.15 : 0.85} />
+              ))}
+            </Bar>
           )}
 
           {/* 검토 중인 건 (최상단, 빨간 테두리) */}
@@ -318,6 +356,42 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
         </ComposedChart>
       </ResponsiveContainer>
 
+      {/* 월별 집계 제외 체크박스 */}
+      {purchaseMonths.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5 text-xs">
+          <span className="text-gray-400 mr-1 shrink-0">집계 제외:</span>
+          {purchaseMonths.map((b) => {
+            const excluded = excludedMonths.has(b.key);
+            return (
+              <label
+                key={b.key}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full border cursor-pointer select-none transition-colors ${
+                  excluded
+                    ? "bg-gray-100 border-gray-300 text-gray-400"
+                    : "bg-white border-gray-200 text-gray-600 hover:border-gray-400"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={!excluded}
+                  onChange={() => toggleMonth(b.key)}
+                  className="w-3 h-3 accent-[#00733C]"
+                />
+                <span className={excluded ? "line-through" : ""}>{b.key}</span>
+              </label>
+            );
+          })}
+          {excludedMonths.size > 0 && onResetExcluded && (
+            <button
+              onClick={onResetExcluded}
+              className="ml-1 px-2 py-0.5 rounded-full border border-dashed border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors"
+            >
+              초기화
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 예상 다음 구매가 차트 범위 밖일 때 안내 */}
       {expectedOutOfRange && expectedNextTs && (
         <div className="text-xs bg-green-50 border border-[#b3d9c6] rounded-lg px-3 py-2 text-[#00733C] flex items-center gap-2">
@@ -338,8 +412,11 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
         <div className="bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
           <div className="text-gray-400 mb-0.5">평균 구매 주기</div>
           <div className="font-semibold text-gray-700">
-            {avgIntervalDays > 0 ? `약 ${avgIntervalDays}일` : "—"}
+            {localAvgIntervalDays > 0 ? `약 ${localAvgIntervalDays}일` : "—"}
           </div>
+          {excludedMonths.size > 0 && (
+            <div className="text-[10px] text-amber-500 mt-0.5">{excludedMonths.size}개월 제외됨</div>
+          )}
         </div>
         <div className="bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
           <div className="text-gray-400 mb-0.5">마지막 구매</div>
@@ -360,15 +437,15 @@ export default function FrequencyChart({ events, avgIntervalDays, lastPurchaseDa
       </div>
 
       {/* 검토 중인 구매 건 판정 */}
-      {review && avgIntervalDays > 0 && daysSinceLast !== null && (
+      {review && localAvgIntervalDays > 0 && daysSinceLast !== null && (
         <div className={`text-xs rounded-xl px-4 py-3 border ${
           isTooEarly
             ? "bg-amber-50 border-amber-200 text-amber-700"
             : "bg-green-50 border-green-200 text-[#00733C]"
         }`}>
           {isTooEarly
-            ? `⚠ 마지막 구매 후 ${daysSinceLast}일 경과 — 평균 주기(${avgIntervalDays}일)의 ${Math.round(daysSinceLast / avgIntervalDays * 100)}% 시점입니다. 조기 구매일 수 있습니다.`
-            : `✅ 마지막 구매 후 ${daysSinceLast}일 경과 — 평균 주기(${avgIntervalDays}일) 이상 경과하여 정상 범위입니다.`
+            ? `⚠ 마지막 구매 후 ${daysSinceLast}일 경과 — 평균 주기(${localAvgIntervalDays}일)의 ${Math.round(daysSinceLast / localAvgIntervalDays * 100)}% 시점입니다. 조기 구매일 수 있습니다.`
+            : `✅ 마지막 구매 후 ${daysSinceLast}일 경과 — 평균 주기(${localAvgIntervalDays}일) 이상 경과하여 정상 범위입니다.`
           }
         </div>
       )}

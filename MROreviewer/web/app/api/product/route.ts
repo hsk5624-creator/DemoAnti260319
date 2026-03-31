@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const dept     = searchParams.get("dept")    ?? "";  // 팀 full 문자열
   const damdang  = searchParams.get("damdang") ?? "";  // 담당 이름
   const bonbu    = searchParams.get("bonbu")   ?? "";  // 본부 이름
-  const spec     = searchParams.get("spec")    ?? "";  // 규격 contains match
+  const specParam = searchParams.getAll("spec");       // 규격 exact match (파라미터 반복)
   const ot       = searchParams.get("orderType") ?? "all";
 
   const records = loadAllRecords();
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
   }
 
   const orderType: OrderType = (ot === "normal" || ot === "advance") ? ot : "all";
-  const analysis = analyzeProduct(name, records, deptFilter, spec || undefined, orderType);
+  const specFilter = specParam.length > 0 ? specParam : undefined;
+  const analysis = analyzeProduct(name, records, deptFilter, specFilter, orderType);
   return Response.json(analysis);
 }

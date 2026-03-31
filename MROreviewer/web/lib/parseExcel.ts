@@ -45,7 +45,7 @@ export function parseExcelBuffer(buffer: ArrayBuffer, fileName: string): MROReco
     records.push({
       orderNumber:    String(r[0]  ?? ""),
       productName:    String(r[1]  ?? "").trim(),
-      spec:           String(r[2]  ?? ""),
+      spec:           String(r[2]  ?? "").trim(),
       manufacturer:   String(r[3]  ?? ""),
       department:     String(r[4]  ?? ""),
       requester:      String(r[5]  ?? ""),
