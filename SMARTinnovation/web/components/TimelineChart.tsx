@@ -18,12 +18,12 @@ interface Props {
 }
 
 const WEEK_W    = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
-const L1_BASE_H = 34;   // L1 기본 행 높이
-const L2_H      = 26;
-const BAR1_H    = 18;   // L1 pill height
-const BAR2_H    = 7;    // L2 pill height
-const MS_ROW_H  = 22;   // 마일스톤 한 줄 높이
-const PHASE_H   = 26;   // Phase 헤더 행 높이
+const L1_BASE_H = 48;   // L1 기본 행 높이
+const L2_H      = 36;
+const BAR1_H    = 14;   // L1 pill height
+const BAR2_H    = 6;    // L2 pill height
+const MS_ROW_H  = 28;   // 마일스톤 한 줄 높이
+const PHASE_H   = 30;   // Phase 헤더 행 높이
 const MIN_LABEL_W = 80;
 const FLAG_ITEM_W = 130; // 플래그 겹침 판단 폭
 
@@ -433,7 +433,7 @@ export default function TimelineChart({
                         />
                       )}
                       <div className="w-[3px] h-8 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                      <span className="text-[13px] font-bold text-gray-800 truncate flex-1 tracking-tight">
+                      <span className="text-[16px] font-bold text-gray-800 truncate flex-1 tracking-tight">
                         {item.name}
                       </span>
                       {/* Phase 설정 버튼 */}
