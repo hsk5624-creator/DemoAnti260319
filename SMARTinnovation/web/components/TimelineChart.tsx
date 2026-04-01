@@ -337,7 +337,7 @@ export default function TimelineChart({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
           <div style={{ minWidth: labelW + totalWeeks * WEEK_W }}>
 
             {/* ━━━ 헤더 ━━━ */}
@@ -504,7 +504,7 @@ export default function TimelineChart({
                     </div>
 
                     {/* 차트 열 */}
-                    <div className="flex-1 relative overflow-hidden">
+                    <div className="flex-1 relative overflow-hidden isolate">
                       {/* 그리드 */}
                       <MonthGrid monthGroups={monthGroups} weekW={WEEK_W} />
 
@@ -734,7 +734,7 @@ export default function TimelineChart({
                           </div>
 
                           {/* 차트 */}
-                          <div className="flex-1 relative overflow-hidden">
+                          <div className="flex-1 relative overflow-hidden isolate">
                             <MonthGrid monthGroups={monthGroups} weekW={WEEK_W} />
                             {showToday && (
                               <div className="absolute top-0 bottom-0 w-px bg-red-400/30 pointer-events-none"
@@ -804,7 +804,7 @@ export default function TimelineChart({
                                     <span className="text-[10px] text-gray-500 truncate flex-1">{l3.name}</span>
                                   </div>
                                   {/* L3 차트 */}
-                                  <div className="flex-1 relative overflow-hidden">
+                                  <div className="flex-1 relative overflow-hidden isolate">
                                     <MonthGrid monthGroups={monthGroups} weekW={WEEK_W} />
                                     {showToday && (
                                       <div className="absolute top-0 bottom-0 w-px bg-red-400/20 pointer-events-none"
