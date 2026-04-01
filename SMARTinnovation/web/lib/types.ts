@@ -23,6 +23,28 @@ export function todayWDate(): WDate {
   return { year: d.getFullYear(), month: d.getMonth() + 1, week: Math.min(4, Math.ceil(d.getDate() / 7)) };
 }
 
+// Level3 일자 → 주 단위 인덱스 (소수점 포함, 1일 = 1/7 주)
+export function dateStrToFractionalWeek(dateStr: string, base: WDate): number {
+  if (!dateStr) return 0;
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return 0;
+  const y = Number(parts[0]), m = Number(parts[1]), d = Number(parts[2]);
+  if (!y || !m || !d) return 0;
+  const week = Math.min(4, Math.ceil(d / 7));
+  const dayInWeek = (d - 1) % 7; // 0–6
+  return wdateToIndex({ year: y, month: m, week }, base) + dayInWeek / 7;
+}
+
+export interface Level3Item {
+  id: string;
+  parentId: string;   // Level2 id
+  name: string;
+  startDate: string;  // "YYYY-MM-DD"
+  endDate: string;    // "YYYY-MM-DD"
+  assignee: string;
+  status: TaskStatus;
+}
+
 export interface Level2Item {
   id: string;
   parentId: string;
@@ -32,6 +54,7 @@ export interface Level2Item {
   assignee: string;
   status: TaskStatus;
   showOnLevel1?: boolean;
+  children?: Level3Item[];
 }
 
 export interface PhaseSegment {

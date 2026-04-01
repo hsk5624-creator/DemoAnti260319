@@ -1,21 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Level1Item, Level2Item, TaskStatus, CATEGORY_COLORS, generateId, formatWDate } from "@/lib/types";
+import { Level1Item, Level2Item, Level3Item, TaskStatus, CATEGORY_COLORS, generateId, formatWDate } from "@/lib/types";
 
 interface Props {
   items: Level1Item[];
   onAddLevel1: (item: Level1Item) => void;
   onAddLevel2: (parentId: string, child: Level2Item) => void;
+  onAddLevel3: (l2Id: string, child: Level3Item) => void;
 }
 
-export default function TimelineForm({ items, onAddLevel1, onAddLevel2 }: Props) {
-  const [level, setLevel] = useState<1 | 2>(1);
+export default function TimelineForm({ items, onAddLevel1, onAddLevel2, onAddLevel3 }: Props) {
+  const [level, setLevel] = useState<1 | 2 | 3>(1);
 
+  // Lv1
   const [l1Name, setL1Name] = useState("");
   const [l1Assignee, setL1Assignee] = useState("");
   const [l1Status, setL1Status] = useState<TaskStatus>("planned");
 
+  // Lv2
   const [l2ParentId, setL2ParentId] = useState("");
   const [l2Name, setL2Name] = useState("");
   const [l2StartM, setL2StartM] = useState("");
@@ -25,6 +28,17 @@ export default function TimelineForm({ items, onAddLevel1, onAddLevel2 }: Props)
   const [l2Assignee, setL2Assignee] = useState("");
   const [l2Status, setL2Status] = useState<TaskStatus>("planned");
   const [l2ShowOnLevel1, setL2ShowOnLevel1] = useState(false);
+
+  // Lv3
+  const [l3L1Id, setL3L1Id] = useState("");
+  const [l3ParentId, setL3ParentId] = useState("");
+  const [l3Name, setL3Name] = useState("");
+  const [l3StartDate, setL3StartDate] = useState("");
+  const [l3EndDate, setL3EndDate] = useState("");
+  const [l3Assignee, setL3Assignee] = useState("");
+  const [l3Status, setL3Status] = useState<TaskStatus>("planned");
+
+  const l2Options = items.find(i => i.id === l3L1Id)?.children ?? [];
 
   const handleSubmitL1 = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +66,18 @@ export default function TimelineForm({ items, onAddLevel1, onAddLevel2 }: Props)
     setL2Assignee(""); setL2Status("planned"); setL2ShowOnLevel1(false);
   };
 
+  const handleSubmitL3 = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!l3ParentId || !l3Name.trim() || !l3StartDate || !l3EndDate) return;
+    onAddLevel3(l3ParentId, {
+      id: generateId(), parentId: l3ParentId, name: l3Name.trim(),
+      startDate: l3StartDate, endDate: l3EndDate,
+      assignee: l3Assignee.trim(), status: l3Status,
+    });
+    setL3Name(""); setL3StartDate(""); setL3EndDate("");
+    setL3Assignee(""); setL3Status("planned");
+  };
+
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#00733C] focus:ring-1 focus:ring-[#00733C] outline-none bg-white";
 
   return (
@@ -60,16 +86,17 @@ export default function TimelineForm({ items, onAddLevel1, onAddLevel2 }: Props)
 
       {/* Level 탭 */}
       <div className="flex rounded-lg border border-gray-100 p-0.5 mb-5 bg-gray-50">
-        {([1, 2] as const).map((l) => (
+        {([1, 2, 3] as const).map((l) => (
           <button key={l} type="button" onClick={() => setLevel(l)}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
               level === l ? "bg-white text-[#00733C] shadow-sm" : "text-gray-400 hover:text-gray-600"
             }`}>
-            Lv{l} {l === 1 ? "그룹 과제" : "세부 과제"}
+            Lv{l} {l === 1 ? "그룹" : l === 2 ? "과제" : "세부항목"}
           </button>
         ))}
       </div>
 
+      {/* ── Lv1 ── */}
       {level === 1 && (
         <form onSubmit={handleSubmitL1} className="space-y-3">
           <Field label="그룹명">
@@ -88,6 +115,7 @@ export default function TimelineForm({ items, onAddLevel1, onAddLevel2 }: Props)
         </form>
       )}
 
+      {/* ── Lv2 ── */}
       {level === 2 && (
         <form onSubmit={handleSubmitL2} className="space-y-3">
           <Field label="상위 그룹 (Lv1)">
@@ -97,27 +125,22 @@ export default function TimelineForm({ items, onAddLevel1, onAddLevel2 }: Props)
             </select>
             {items.length === 0 && <p className="text-[11px] text-amber-500 mt-1">먼저 Lv1 그룹 과제를 추가하세요.</p>}
           </Field>
-          <Field label="세부 과제명">
+          <Field label="과제명">
             <input value={l2Name} onChange={(e) => setL2Name(e.target.value)}
               placeholder="예: URS 작성, 업체 선정..." className={inputCls} required />
           </Field>
-
-          {/* 시작일: 월 + 주 */}
           <Field label="시작일">
             <div className="space-y-1.5">
               <input type="month" value={l2StartM} onChange={(e) => setL2StartM(e.target.value)} className={inputCls} required />
               <WeekPicker value={l2StartW} onChange={setL2StartW} />
             </div>
           </Field>
-
-          {/* 종료일: 월 + 주 */}
           <Field label="종료일">
             <div className="space-y-1.5">
               <input type="month" value={l2EndM} onChange={(e) => setL2EndM(e.target.value)} className={inputCls} required />
               <WeekPicker value={l2EndW} onChange={setL2EndW} />
             </div>
           </Field>
-
           <Field label="담당자">
             <input value={l2Assignee} onChange={(e) => setL2Assignee(e.target.value)}
               placeholder="담당자명 (선택)" className={inputCls} />
@@ -125,7 +148,6 @@ export default function TimelineForm({ items, onAddLevel1, onAddLevel2 }: Props)
           <Field label="상태">
             <StatusSelect value={l2Status} onChange={setL2Status} />
           </Field>
-
           <label className="flex items-start gap-2.5 cursor-pointer group pt-1">
             <input type="checkbox" checked={l2ShowOnLevel1} onChange={(e) => setL2ShowOnLevel1(e.target.checked)}
               className="mt-0.5 w-4 h-4 accent-[#00733C] cursor-pointer" />
@@ -136,8 +158,46 @@ export default function TimelineForm({ items, onAddLevel1, onAddLevel2 }: Props)
               <p className="text-[10px] text-gray-400 mt-0.5">Lv1 타임라인 바에 마일스톤으로 함께 표시됩니다.</p>
             </div>
           </label>
+          <SubmitBtn>과제 추가</SubmitBtn>
+        </form>
+      )}
 
-          <SubmitBtn>세부 과제 추가</SubmitBtn>
+      {/* ── Lv3 ── */}
+      {level === 3 && (
+        <form onSubmit={handleSubmitL3} className="space-y-3">
+          <Field label="상위 그룹 (Lv1)">
+            <select value={l3L1Id} onChange={(e) => { setL3L1Id(e.target.value); setL3ParentId(""); }} className={inputCls} required>
+              <option value="">선택하세요</option>
+              {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+          </Field>
+          <Field label="상위 과제 (Lv2)">
+            <select value={l3ParentId} onChange={(e) => setL3ParentId(e.target.value)} className={inputCls} required>
+              <option value="">선택하세요</option>
+              {l2Options.map(l2 => <option key={l2.id} value={l2.id}>{l2.name}</option>)}
+            </select>
+            {l3L1Id && l2Options.length === 0 && (
+              <p className="text-[11px] text-amber-500 mt-1">해당 그룹에 Lv2 과제가 없습니다.</p>
+            )}
+          </Field>
+          <Field label="세부항목명">
+            <input value={l3Name} onChange={(e) => setL3Name(e.target.value)}
+              placeholder="예: 요구사항 정의, 설계 검토..." className={inputCls} required />
+          </Field>
+          <Field label="시작일">
+            <input type="date" value={l3StartDate} onChange={(e) => setL3StartDate(e.target.value)} className={inputCls} required />
+          </Field>
+          <Field label="종료일">
+            <input type="date" value={l3EndDate} onChange={(e) => setL3EndDate(e.target.value)} className={inputCls} required />
+          </Field>
+          <Field label="담당자">
+            <input value={l3Assignee} onChange={(e) => setL3Assignee(e.target.value)}
+              placeholder="담당자명 (선택)" className={inputCls} />
+          </Field>
+          <Field label="상태">
+            <StatusSelect value={l3Status} onChange={setL3Status} />
+          </Field>
+          <SubmitBtn>세부항목 추가</SubmitBtn>
         </form>
       )}
     </div>

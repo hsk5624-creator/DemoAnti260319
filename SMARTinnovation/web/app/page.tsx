@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Level1Item, Level2Item, PhaseSegment, CATEGORY_COLORS, generateId } from "@/lib/types";
+import { Level1Item, Level2Item, Level3Item, PhaseSegment, CATEGORY_COLORS, generateId } from "@/lib/types";
 import TimelineForm from "@/components/TimelineForm";
 import TimelineChart from "@/components/TimelineChart";
 import TaskList from "@/components/TaskList";
@@ -220,6 +220,35 @@ export default function Home() {
     [saveUndo],
   );
 
+  const handleAddLevel3 = useCallback((l2Id: string, child: Level3Item) => {
+    setItems(prev => prev.map(l1 => ({
+      ...l1,
+      children: l1.children.map(l2 =>
+        l2.id === l2Id
+          ? { ...l2, children: [...(l2.children ?? []), { ...child, parentId: l2Id }] }
+          : l2
+      ),
+    })));
+  }, []);
+
+  const handleDeleteLevel3 = useCallback((l2Id: string, childId: string) => {
+    setItems(prev => {
+      let name = "";
+      for (const l1 of prev)
+        for (const l2 of l1.children)
+          if (l2.id === l2Id) name = l2.children?.find(c => c.id === childId)?.name ?? "";
+      saveUndo(prev, `세부항목 "${name}" 삭제됨`);
+      return prev.map(l1 => ({
+        ...l1,
+        children: l1.children.map(l2 =>
+          l2.id === l2Id
+            ? { ...l2, children: (l2.children ?? []).filter(c => c.id !== childId) }
+            : l2
+        ),
+      }));
+    });
+  }, [saveUndo]);
+
   const handleEditLevel1Color = useCallback((id: string, color: string) => {
     setItems(prev => prev.map(item => item.id === id ? { ...item, color } : item));
   }, []);
@@ -295,8 +324,8 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
           {/* 좌측 패널 */}
           <div className="space-y-3 lg:sticky lg:top-4">
-            <TimelineForm items={items} onAddLevel1={handleAddLevel1} onAddLevel2={handleAddLevel2} />
-            <TaskList items={items} onDeleteLevel1={handleDeleteLevel1} onDeleteLevel2={handleDeleteLevel2} />
+            <TimelineForm items={items} onAddLevel1={handleAddLevel1} onAddLevel2={handleAddLevel2} onAddLevel3={handleAddLevel3} />
+            <TaskList items={items} onDeleteLevel1={handleDeleteLevel1} onDeleteLevel2={handleDeleteLevel2} onDeleteLevel3={handleDeleteLevel3} />
           </div>
 
           {/* 우측: 타임라인 차트 */}

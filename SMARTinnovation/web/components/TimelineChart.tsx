@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback, Fragment } from "react";
 import {
   Level1Item, Level2Item, PhaseSegment, TaskStatus, STATUS_COLORS,
   getLevel1Range, parseWDate, wdateToIndex, todayWDate, WDate,
+  dateStrToFractionalWeek,
 } from "@/lib/types";
 
 interface BulkShiftUpdate { parentId: string; childId: string; startDate: string; endDate: string; }
@@ -25,6 +26,8 @@ const BAR1_H    = 14;   // L1 pill height
 const BAR2_H    = 6;    // L2 pill height
 const MS_ROW_H  = 28;   // 마일스톤 한 줄 높이
 const PHASE_H   = 30;   // Phase 헤더 행 높이
+const L3_H      = 24;   // L3 행 높이
+const BAR3_H    = 5;    // L3 pill height
 const MIN_LABEL_W = 80;
 const FLAG_ITEM_W = 130; // 플래그 겹침 판단 폭
 
@@ -68,6 +71,7 @@ export default function TimelineChart({
   onEditLevel1Color,
 }: Props) {
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
+  const [expandedL2,    setExpandedL2]    = useState<Set<string>>(new Set());
   const [editTarget,    setEditTarget]    = useState<{ parentId: string; child: Level2Item } | null>(null);
   const [phaseTarget,   setPhaseTarget]   = useState<Level1Item | null>(null);
   const [editMode,      setEditMode]      = useState(false);
@@ -235,6 +239,9 @@ export default function TimelineChart({
   const toggle = (id: string) =>
     setExpanded(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
+  const toggleL2Expand = (id: string) =>
+    setExpandedL2(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragRef.current = { startX: e.clientX, startW: labelW };
@@ -376,7 +383,10 @@ export default function TimelineChart({
             {items.map((item, itemIdx) => {
               const range      = getLevel1Range(item);
               const isExpanded = expanded.has(item.id);
-              const l2TotalH   = item.children.length * L2_H;
+              const l2TotalH   = item.children.reduce((sum, l2) => {
+                const l3Count = l2.children?.length ?? 0;
+                return sum + L2_H + (expandedL2.has(l2.id) && l3Count > 0 ? l3Count * L3_H : 0);
+              }, 0);
 
               /* ── 이 L1의 마일스톤 플래그 스태킹 ── */
               const msRaw = item.children
@@ -658,15 +668,20 @@ export default function TimelineChart({
                         ? (dragOffset?.weekOffset ?? 0) * WEEK_W : 0;
 
                       return (
-                        <div key={child.id}
+                        <Fragment key={child.id}>
+                        <div
                           className={`flex border-t border-gray-100 group transition-colors duration-100
                             ${cIdx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}
                             ${editMode ? "" : "cursor-pointer hover:bg-blue-50/50"}`}
                           style={{ height: L2_H }}
                           onClick={e => {
-                            if (editMode) return; // 편집 모드에서는 클릭 무시
+                            if (editMode) return;
                             e.stopPropagation();
-                            setEditTarget({ parentId: item.id, child });
+                            if ((child.children?.length ?? 0) > 0) {
+                              toggleL2Expand(child.id);
+                            } else {
+                              setEditTarget({ parentId: item.id, child });
+                            }
                           }}
                         >
                           {/* 라벨 */}
@@ -679,6 +694,11 @@ export default function TimelineChart({
                                 onClick={e => e.stopPropagation()}
                                 className="w-3.5 h-3.5 accent-indigo-600 shrink-0 cursor-pointer"
                               />
+                            ) : (child.children?.length ?? 0) > 0 ? (
+                              <svg className={`w-2.5 h-2.5 text-gray-400 shrink-0 transition-transform duration-200 ml-1 ${expandedL2.has(child.id) ? "rotate-90" : ""}`}
+                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                              </svg>
                             ) : (
                               <div className="w-1 h-1 rounded-full shrink-0 ml-2"
                                 style={{ backgroundColor: color, opacity: 0.7 }} />
@@ -738,6 +758,58 @@ export default function TimelineChart({
                             )}
                           </div>
                         </div>
+
+                        {/* ── Level 3 슬라이드 ── */}
+                        {(child.children?.length ?? 0) > 0 && (
+                          <div style={{
+                            maxHeight: expandedL2.has(child.id)
+                              ? `${child.children!.length * L3_H}px` : "0px",
+                            overflow: "hidden",
+                            transition: "max-height 0.25s cubic-bezier(0.4,0,0.2,1)",
+                          }}>
+                            {child.children!.map((l3, l3Idx) => {
+                              const sx3 = dateStrToFractionalWeek(l3.startDate, base) * WEEK_W;
+                              const ex3 = dateStrToFractionalWeek(l3.endDate,   base) * WEEK_W + WEEK_W / 7;
+                              const bw3 = Math.max(ex3 - sx3, WEEK_W / 7 * 3);
+                              const c3  = STATUS_COLORS[l3.status];
+                              return (
+                                <div key={l3.id}
+                                  className={`flex border-t border-gray-100 ${l3Idx % 2 === 0 ? "bg-slate-50/30" : "bg-white"}`}
+                                  style={{ height: L3_H }}>
+                                  {/* L3 라벨 */}
+                                  <div style={{ width: labelW, minWidth: labelW }}
+                                    className="border-r border-gray-100 flex items-center px-3 gap-1.5 shrink-0 pl-8">
+                                    <div className="w-px h-3 bg-gray-200 shrink-0" />
+                                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c3 }} />
+                                    <span className="text-[10px] text-gray-500 truncate flex-1">{l3.name}</span>
+                                  </div>
+                                  {/* L3 차트 */}
+                                  <div className="flex-1 relative overflow-hidden">
+                                    <MonthGrid monthGroups={monthGroups} weekW={WEEK_W} />
+                                    {showToday && (
+                                      <div className="absolute top-0 bottom-0 w-px bg-red-400/20 pointer-events-none"
+                                        style={{ left: todayX }} />
+                                    )}
+                                    <div className="absolute z-10 rounded-full shadow-sm"
+                                      style={{
+                                        left: sx3, top: (L3_H - BAR3_H) / 2,
+                                        width: bw3, height: BAR3_H,
+                                        backgroundColor: c3, opacity: 0.75,
+                                      }} />
+                                    <div className="absolute text-[9px] font-medium whitespace-nowrap z-20 pointer-events-none"
+                                      style={{
+                                        left: sx3 + bw3 / 2, top: (L3_H - BAR3_H) / 2 - 11,
+                                        transform: "translateX(-50%)", color: c3,
+                                      }}>
+                                      {l3.name}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        </Fragment>
                       );
                     })}
                   </div>
