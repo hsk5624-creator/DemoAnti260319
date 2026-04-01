@@ -302,6 +302,21 @@ export default function Home() {
     );
   }, []);
 
+  const handleEditLevel3 = useCallback((l2Id: string, updated: Level3Item) => {
+    setItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        children: item.children.map((l2) => {
+          if (l2.id !== l2Id) return l2;
+          return {
+            ...l2,
+            children: (l2.children ?? []).map((l3) => l3.id === updated.id ? updated : l3),
+          };
+        }),
+      }))
+    );
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50/70">
       {/* 되돌리기 토스트 */}
@@ -349,6 +364,7 @@ export default function Home() {
             onReorderLevel1={handleReorderLevel1}
             onEditLevel1Color={handleEditLevel1Color}
             onEditLevel1={handleEditLevel1}
+            onEditLevel3={handleEditLevel3}
           />
         </div>
       </main>

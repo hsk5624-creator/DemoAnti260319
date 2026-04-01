@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useRef, useCallback, Fragment } from "react";
 import {
-  Level1Item, Level2Item, PhaseSegment, TaskStatus, STATUS_COLORS,
+  Level1Item, Level2Item, Level3Item, PhaseSegment, TaskStatus, STATUS_COLORS,
   getLevel1Range, parseWDate, wdateToIndex, todayWDate, WDate,
   dateStrToFractionalWeek,
 } from "@/lib/types";
@@ -18,6 +18,7 @@ interface Props {
   onReorderLevel1?: (draggingId: string, dropBeforeId: string | null) => void;
   onEditLevel1Color?: (id: string, color: string) => void;
   onEditLevel1?: (updated: Level1Item) => void;
+  onEditLevel3?: (l2Id: string, updated: Level3Item) => void;
 }
 
 const WEEK_W    = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
@@ -71,10 +72,12 @@ export default function TimelineChart({
   onReorderLevel1,
   onEditLevel1Color,
   onEditLevel1,
+  onEditLevel3,
 }: Props) {
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [expandedL2,    setExpandedL2]    = useState<Set<string>>(new Set());
   const [editTarget,    setEditTarget]    = useState<{ parentId: string; child: Level2Item } | null>(null);
+  const [l3EditTarget,  setL3EditTarget]  = useState<{ l2Id: string; child: Level3Item } | null>(null);
   const [l1EditTarget,  setL1EditTarget]  = useState<Level1Item | null>(null);
   const [phaseTarget,   setPhaseTarget]   = useState<Level1Item | null>(null);
   const [editMode,      setEditMode]      = useState(false);
@@ -794,8 +797,9 @@ export default function TimelineChart({
                               const c3  = STATUS_COLORS[l3.status];
                               return (
                                 <div key={l3.id}
-                                  className={`flex border-t border-gray-100 ${l3Idx % 2 === 0 ? "bg-slate-50/30" : "bg-white"}`}
-                                  style={{ height: L3_H }}>
+                                  className={`flex border-t border-gray-100 cursor-pointer hover:bg-blue-50/40 ${l3Idx % 2 === 0 ? "bg-slate-50/30" : "bg-white"}`}
+                                  style={{ height: L3_H }}
+                                  onClick={() => setL3EditTarget({ l2Id: child.id, child: l3 })}>
                                   {/* L3 라벨 */}
                                   <div style={{ width: labelW, minWidth: labelW }}
                                     className="sticky left-0 z-10 bg-white border-r border-gray-100 flex items-center px-3 gap-1.5 shrink-0 pl-8">
@@ -882,6 +886,16 @@ export default function TimelineChart({
           items={items}
           onSave={(pid, updated) => { onEditLevel2?.(pid, updated); setEditTarget(null); }}
           onClose={() => setEditTarget(null)}
+        />
+      )}
+
+      {/* L3 수정 모달 */}
+      {l3EditTarget && (
+        <EditLevel3Modal
+          l2Id={l3EditTarget.l2Id}
+          child={l3EditTarget.child}
+          onSave={(l2Id, updated) => { onEditLevel3?.(l2Id, updated); setL3EditTarget(null); }}
+          onClose={() => setL3EditTarget(null)}
         />
       )}
 
@@ -1081,6 +1095,74 @@ function WPicker({ value, onChange }: { value: number; onChange: (w: number) => 
           {w}W
         </button>
       ))}
+    </div>
+  );
+}
+
+/* ── Lv3 수정 모달 ── */
+function EditLevel3Modal({ l2Id, child, onSave, onClose }: {
+  l2Id: string; child: Level3Item;
+  onSave: (l2Id: string, updated: Level3Item) => void;
+  onClose: () => void;
+}) {
+  const [name,      setName]      = useState(child.name);
+  const [startDate, setStartDate] = useState(child.startDate);
+  const [endDate,   setEndDate]   = useState(child.endDate);
+  const [assignee,  setAssignee]  = useState(child.assignee);
+  const [status,    setStatus]    = useState<TaskStatus>(child.status);
+
+  const inp = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#00733C] focus:ring-1 focus:ring-[#00733C] outline-none";
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !startDate || !endDate) return;
+    onSave(l2Id, { ...child, name: name.trim(), startDate, endDate, assignee: assignee.trim(), status });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/25 backdrop-blur-sm" />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-100"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">세부항목 수정</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Level 3 항목 수정</p>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-lg">×</button>
+        </div>
+        <form onSubmit={handleSave} className="space-y-3.5">
+          <Lbl label="세부항목명">
+            <input value={name} onChange={e => setName(e.target.value)} className={inp} required />
+          </Lbl>
+          <div className="grid grid-cols-2 gap-3">
+            <Lbl label="시작일">
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inp} required />
+            </Lbl>
+            <Lbl label="종료일">
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inp} required />
+            </Lbl>
+          </div>
+          <Lbl label="담당자">
+            <input value={assignee} onChange={e => setAssignee(e.target.value)} placeholder="담당자명" className={inp} />
+          </Lbl>
+          <Lbl label="상태">
+            <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)} className={inp}>
+              <option value="planned">예정</option>
+              <option value="in-progress">진행중</option>
+              <option value="completed">완료</option>
+              <option value="critical">핵심 마일스톤</option>
+            </select>
+          </Lbl>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium">취소</button>
+            <button type="submit"
+              className="flex-1 py-2.5 rounded-xl bg-[#00733C] hover:bg-[#005a2e] text-white text-sm font-bold transition-colors">저장</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
