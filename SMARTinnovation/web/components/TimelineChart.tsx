@@ -4,10 +4,11 @@ import { useMemo, useState, useRef, useCallback, Fragment } from "react";
 import {
   Level1Item, Level2Item, Level3Item, PhaseSegment, TaskStatus, STATUS_COLORS,
   getLevel1Range, parseWDate, wdateToIndex, todayWDate, WDate,
-  dateStrToFractionalWeek,
+  dateStrToFractionalWeek, shiftDateByWeeks,
 } from "@/lib/types";
 
 interface BulkShiftUpdate { parentId: string; childId: string; startDate: string; endDate: string; }
+interface BulkShiftL3Update { l2Id: string; l3Id: string; startDate: string; endDate: string; }
 
 interface Props {
   items: Level1Item[];
@@ -19,6 +20,7 @@ interface Props {
   onEditLevel1Color?: (id: string, color: string) => void;
   onEditLevel1?: (updated: Level1Item) => void;
   onEditLevel3?: (l2Id: string, updated: Level3Item) => void;
+  onBulkShiftL3?: (updates: BulkShiftL3Update[]) => void;
 }
 
 const WEEK_W    = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
@@ -73,6 +75,7 @@ export default function TimelineChart({
   onEditLevel1Color,
   onEditLevel1,
   onEditLevel3,
+  onBulkShiftL3,
 }: Props) {
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [expandedL2,    setExpandedL2]    = useState<Set<string>>(new Set());
@@ -80,12 +83,14 @@ export default function TimelineChart({
   const [l3EditTarget,  setL3EditTarget]  = useState<{ l2Id: string; child: Level3Item } | null>(null);
   const [l1EditTarget,  setL1EditTarget]  = useState<Level1Item | null>(null);
   const [phaseTarget,   setPhaseTarget]   = useState<Level1Item | null>(null);
-  const [editMode,      setEditMode]      = useState(false);
-  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set());
-  // dragOffset: 'l1' = L1바 드래그, 'l2' = L2바 드래그
+  const [editMode,        setEditMode]        = useState(false);
+  const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
+  const [selectedL3Ids,   setSelectedL3Ids]   = useState<Set<string>>(new Set());
+  // dragOffset: 'l1' = L1바 드래그, 'l2' = L2바 드래그, 'l3' = L3바 드래그
   const [dragOffset, setDragOffset] = useState<
     | { type: 'l1'; itemId: string; weekOffset: number }
     | { type: 'l2'; childId: string; weekOffset: number }
+    | { type: 'l3'; l3Id: string; weekOffset: number }
     | null
   >(null);
 
@@ -99,14 +104,17 @@ export default function TimelineChart({
   const reorderDragRef = useRef<{ draggingId: string; dropBeforeId: string | null } | null>(null);
 
   // 최신 items / selectedIds를 드래그 핸들러(클로저) 안에서 참조하기 위한 ref
-  const itemsRef        = useRef(items);
-  const selectedIdsRef  = useRef(selectedIds);
-  itemsRef.current      = items;
-  selectedIdsRef.current = selectedIds;
+  const itemsRef          = useRef(items);
+  const selectedIdsRef    = useRef(selectedIds);
+  const selectedL3IdsRef  = useRef(selectedL3Ids);
+  itemsRef.current        = items;
+  selectedIdsRef.current  = selectedIds;
+  selectedL3IdsRef.current = selectedL3Ids;
 
   const exitEditMode = useCallback(() => {
     setEditMode(false);
     setSelectedIds(new Set());
+    setSelectedL3Ids(new Set());
     setDragOffset(null);
   }, []);
 
@@ -128,6 +136,63 @@ export default function TimelineChart({
       return n;
     });
   }, []);
+
+  const toggleL3 = useCallback((id: string) => {
+    setSelectedL3Ids(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  }, []);
+
+  // L3 바 드래그 핸들러
+  const handleL3BarMouseDown = useCallback((
+    e: React.MouseEvent,
+    l3Id: string,
+  ) => {
+    if (!editMode || !onBulkShiftL3) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startX = e.clientX;
+    let lastOffset = 0;
+
+    const onMove = (ev: MouseEvent) => {
+      const newOffset = Math.round((ev.clientX - startX) / WEEK_W);
+      if (newOffset !== lastOffset) {
+        lastOffset = newOffset;
+        setDragOffset({ type: 'l3', l3Id, weekOffset: newOffset });
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setDragOffset(null);
+      if (lastOffset === 0) return;
+
+      const curSelected = selectedL3IdsRef.current;
+      const curItems    = itemsRef.current;
+      const idsToShift  = curSelected.size > 0 && curSelected.has(l3Id)
+        ? curSelected : new Set([l3Id]);
+
+      const updates: BulkShiftL3Update[] = [];
+      for (const item of curItems)
+        for (const l2 of item.children)
+          for (const l3 of (l2.children ?? []))
+            if (idsToShift.has(l3.id))
+              updates.push({
+                l2Id: l2.id, l3Id: l3.id,
+                startDate: shiftDateByWeeks(l3.startDate, lastOffset),
+                endDate:   shiftDateByWeeks(l3.endDate,   lastOffset),
+              });
+
+      if (updates.length > 0) onBulkShiftL3(updates);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [editMode, onBulkShiftL3]);
 
   // L2 바 드래그 핸들러
   const handleBarMouseDown = useCallback((
@@ -795,15 +860,29 @@ export default function TimelineChart({
                               const ex3 = dateStrToFractionalWeek(l3.endDate,   base) * WEEK_W + WEEK_W / 7;
                               const bw3 = Math.max(ex3 - sx3, WEEK_W / 7 * 3);
                               const c3  = STATUS_COLORS[l3.status];
+
+                              const isDragThisL3  = dragOffset?.type === 'l3' && dragOffset.l3Id === l3.id;
+                              const isDragGroupL3 = dragOffset?.type === 'l3' && selectedL3Ids.has(dragOffset.l3Id) && selectedL3Ids.has(l3.id);
+                              const previewPx3 = (isDragThisL3 || isDragGroupL3) ? (dragOffset?.weekOffset ?? 0) * WEEK_W : 0;
+
                               return (
                                 <div key={l3.id}
-                                  className={`flex border-t border-gray-100 cursor-pointer hover:bg-blue-50/40 ${l3Idx % 2 === 0 ? "bg-slate-50/30" : "bg-white"}`}
+                                  className={`flex border-t border-gray-100 ${editMode ? "" : "cursor-pointer hover:bg-blue-50/40"} ${l3Idx % 2 === 0 ? "bg-slate-50/30" : "bg-white"}`}
                                   style={{ height: L3_H }}
-                                  onClick={() => setL3EditTarget({ l2Id: child.id, child: l3 })}>
+                                  onClick={() => { if (!editMode) setL3EditTarget({ l2Id: child.id, child: l3 }); }}>
                                   {/* L3 라벨 */}
                                   <div style={{ width: labelW, minWidth: labelW }}
                                     className="sticky left-0 z-10 bg-white border-r border-gray-100 flex items-center px-3 gap-1.5 shrink-0 pl-8">
-                                    <div className="w-px h-3 bg-gray-200 shrink-0" />
+                                    {editMode ? (
+                                      <input type="checkbox"
+                                        checked={selectedL3Ids.has(l3.id)}
+                                        onChange={e => { e.stopPropagation(); toggleL3(l3.id); }}
+                                        onClick={e => e.stopPropagation()}
+                                        className="w-3 h-3 accent-indigo-600 shrink-0 cursor-pointer"
+                                      />
+                                    ) : (
+                                      <div className="w-px h-3 bg-gray-200 shrink-0" />
+                                    )}
                                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c3 }} />
                                     <span className="text-[10px] text-gray-500 truncate flex-1">{l3.name}</span>
                                   </div>
@@ -814,15 +893,20 @@ export default function TimelineChart({
                                       <div className="absolute top-0 bottom-0 w-px bg-red-400/20 pointer-events-none"
                                         style={{ left: todayX }} />
                                     )}
-                                    <div className="absolute z-10 rounded-full shadow-sm"
+                                    <div
+                                      className={`absolute z-10 rounded-full shadow-sm${editMode ? " cursor-ew-resize hover:shadow-md hover:ring-1 hover:ring-indigo-300" : ""}`}
                                       style={{
-                                        left: sx3, top: (L3_H - BAR3_H) / 2,
+                                        left: sx3 + previewPx3, top: (L3_H - BAR3_H) / 2,
                                         width: bw3, height: BAR3_H,
-                                        backgroundColor: c3, opacity: 0.75,
-                                      }} />
+                                        backgroundColor: c3,
+                                        opacity: previewPx3 !== 0 ? 1 : 0.75,
+                                        outline: previewPx3 !== 0 ? `2px solid ${c3}` : undefined,
+                                      }}
+                                      onMouseDown={e => handleL3BarMouseDown(e, l3.id)}
+                                    />
                                     <div className="absolute text-[9px] font-medium whitespace-nowrap z-20 pointer-events-none"
                                       style={{
-                                        left: sx3 + bw3 / 2, top: (L3_H - BAR3_H) / 2 - 11,
+                                        left: sx3 + previewPx3 + bw3 / 2, top: (L3_H - BAR3_H) / 2 - 11,
                                         transform: "translateX(-50%)", color: c3,
                                       }}>
                                       {l3.name}

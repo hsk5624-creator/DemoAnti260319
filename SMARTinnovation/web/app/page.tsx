@@ -302,6 +302,26 @@ export default function Home() {
     );
   }, []);
 
+  const handleBulkShiftL3 = useCallback((updates: { l2Id: string; l3Id: string; startDate: string; endDate: string }[]) => {
+    setItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        children: item.children.map((l2) => {
+          const l2Updates = updates.filter((u) => u.l2Id === l2.id);
+          if (l2Updates.length === 0) return l2;
+          return {
+            ...l2,
+            children: (l2.children ?? []).map((l3) => {
+              const upd = l2Updates.find((u) => u.l3Id === l3.id);
+              if (!upd) return l3;
+              return { ...l3, startDate: upd.startDate, endDate: upd.endDate };
+            }),
+          };
+        }),
+      }))
+    );
+  }, []);
+
   const handleEditLevel3 = useCallback((l2Id: string, updated: Level3Item) => {
     setItems((prev) =>
       prev.map((item) => ({
@@ -365,6 +385,7 @@ export default function Home() {
             onEditLevel1Color={handleEditLevel1Color}
             onEditLevel1={handleEditLevel1}
             onEditLevel3={handleEditLevel3}
+            onBulkShiftL3={handleBulkShiftL3}
           />
         </div>
       </main>
