@@ -23,6 +23,14 @@ export function todayWDate(): WDate {
   return { year: d.getFullYear(), month: d.getMonth() + 1, week: Math.min(4, Math.ceil(d.getDate() / 7)) };
 }
 
+// YYYY-MM-DD 날짜를 N주 이동
+export function shiftDateByWeeks(dateStr: string, weeks: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + weeks * 7);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
 // Level3 일자 → 주 단위 인덱스 (소수점 포함, 1일 = 1/7 주)
 export function dateStrToFractionalWeek(dateStr: string, base: WDate): number {
   if (!dateStr) return 0;

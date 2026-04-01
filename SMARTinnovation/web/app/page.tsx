@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Level1Item, Level2Item, Level3Item, PhaseSegment, CATEGORY_COLORS, generateId } from "@/lib/types";
+import { Level1Item, Level2Item, Level3Item, PhaseSegment, CATEGORY_COLORS, generateId, parseWDate, wdateToIndex, shiftDateByWeeks } from "@/lib/types";
 import TimelineForm from "@/components/TimelineForm";
 import TimelineChart from "@/components/TimelineChart";
 import TaskList from "@/components/TaskList";
@@ -212,7 +212,15 @@ export default function Home() {
           ...item,
           children: item.children.map((child) => {
             const upd = updates.find((u) => u.childId === child.id);
-            return upd ? { ...child, startDate: upd.startDate, endDate: upd.endDate } : child;
+            if (!upd) return child;
+            // L2가 이동한 주 수를 계산해 Lv3도 함께 이동
+            const deltaWeeks = wdateToIndex(parseWDate(upd.startDate), parseWDate(child.startDate));
+            const newL3 = child.children?.map(l3 => ({
+              ...l3,
+              startDate: shiftDateByWeeks(l3.startDate, deltaWeeks),
+              endDate:   shiftDateByWeeks(l3.endDate,   deltaWeeks),
+            }));
+            return { ...child, startDate: upd.startDate, endDate: upd.endDate, children: newL3 };
           }),
         }));
       });
