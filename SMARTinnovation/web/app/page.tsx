@@ -10,47 +10,106 @@ const C = CATEGORY_COLORS;
 const g = generateId;
 
 const DEFAULT_DATA: Level1Item[] = [
+  // ── 별첨 로드맵 과제 ───────────────────────────────────────────
   {
-    id: g(), name: "MES", color: C[0], assignee: "", status: "in-progress",
+    id: g(), name: "전자라벨", color: C[0], assignee: "", status: "in-progress",
     children: [
-      { id: g(), parentId: "", name: "MES TFT 창설", startDate: "2026-02-W1", endDate: "2026-02-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "설비자산 업체 실사", startDate: "2026-03-W1", endDate: "2026-04-W2", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "로드맵 상세화", startDate: "2026-04-W1", endDate: "2026-05-W2", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "업체별 장단점 분석", startDate: "2026-05-W3", endDate: "2026-07-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "URS 작성", startDate: "2026-08-W1", endDate: "2026-10-W3", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "26.12 업체 선정", startDate: "2026-11-W1", endDate: "2026-12-W4", assignee: "", status: "in-progress", showOnLevel1: true },
-      { id: g(), parentId: "", name: "MES 구축 개시", startDate: "2027-01-W1", endDate: "2027-01-W2", assignee: "", status: "critical", showOnLevel1: true },
-      { id: g(), parentId: "", name: "기능 디자인 설계", startDate: "2027-01-W3", endDate: "2027-03-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "28.10 Go-Live", startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical", showOnLevel1: true },
+      { id: g(), parentId: "", name: "테스트 수행",               startDate: "2026-02-W1", endDate: "2026-02-W4", assignee: "", status: "in-progress", showOnLevel1: false },
+      { id: g(), parentId: "", name: "적용 여부 검토 및 발주",     startDate: "2026-02-W1", endDate: "2026-03-W2", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "LAN 포설 및 게이트웨이 설치", startDate: "2026-03-W1", endDate: "2026-04-W2", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "전자현황판 전사 설치",        startDate: "2026-04-W1", endDate: "2026-05-W2", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "5월말 Go-Live",              startDate: "2026-05-W3", endDate: "2026-05-W4", assignee: "", status: "critical",    showOnLevel1: true  },
     ],
   },
   {
-    id: g(), name: "CMMS", color: C[1], assignee: "", status: "planned",
+    id: g(), name: "SOP AI", color: C[1], assignee: "", status: "planned",
     children: [
-      { id: g(), parentId: "", name: "CMMS 적용 범위 설정", startDate: "2026-03-W1", endDate: "2026-05-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "담당자 지정", startDate: "2026-04-W1", endDate: "2026-05-W2", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "URS 의견 청취 및 작성", startDate: "2026-05-W3", endDate: "2026-07-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "26.10 업체 선정", startDate: "2026-09-W1", endDate: "2026-10-W4", assignee: "", status: "in-progress", showOnLevel1: true },
-      { id: g(), parentId: "", name: "26.12 업체 계약", startDate: "2026-11-W1", endDate: "2026-12-W4", assignee: "", status: "critical", showOnLevel1: true },
-      { id: g(), parentId: "", name: "구축 계획 수립", startDate: "2027-01-W1", endDate: "2027-02-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "업무 프로세스 설계", startDate: "2027-02-W1", endDate: "2027-05-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "27.12 Go-Live", startDate: "2027-12-W1", endDate: "2027-12-W2", assignee: "", status: "critical", showOnLevel1: true },
+      { id: g(), parentId: "", name: "사내 AI 경진대회 수상 가정(5월)", startDate: "2026-05-W1", endDate: "2026-05-W4", assignee: "", status: "in-progress", showOnLevel1: true  },
+      { id: g(), parentId: "", name: "Kick-off",                        startDate: "2026-06-W1", endDate: "2026-06-W2", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "컨셉 및 모델 전략 수립",            startDate: "2026-06-W3", endDate: "2026-08-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "데이터 전처리",                     startDate: "2026-08-W1", endDate: "2026-09-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "프로토타입/테스트",                  startDate: "2026-09-W1", endDate: "2026-11-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "시스템 개발",                       startDate: "2026-10-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "사용자 평가 및 피드백 반영",          startDate: "2026-12-W1", endDate: "2027-04-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "'27.06 Go-Live",                   startDate: "2027-06-W1", endDate: "2027-06-W2", assignee: "", status: "critical",    showOnLevel1: true  },
     ],
   },
   {
-    id: g(), name: "NIR", color: C[2], assignee: "", status: "planned",
+    id: g(), name: "PPQR, 실패관리 AI", color: C[2], assignee: "", status: "planned",
     children: [
-      { id: g(), parentId: "", name: "평가 항목 및 요구사항 검토", startDate: "2026-01-W1", endDate: "2026-03-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "담당자 지정", startDate: "2026-01-W3", endDate: "2026-02-W2", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "URS 작성", startDate: "2026-02-W3", endDate: "2026-04-W2", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "장비 구매", startDate: "2026-04-W1", endDate: "2026-05-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "평가 진행 및 가능성 검토", startDate: "2026-05-W1", endDate: "2026-09-W4", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "28년 생산 도입", startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical", showOnLevel1: true },
+      { id: g(), parentId: "", name: "업체 소싱 및 사전 미팅(3월)", startDate: "2026-02-W1", endDate: "2026-03-W4", assignee: "", status: "in-progress", showOnLevel1: true  },
+      { id: g(), parentId: "", name: "업체 선정",                   startDate: "2026-04-W1", endDate: "2026-04-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "분류 체계 체계화",             startDate: "2026-05-W1", endDate: "2026-07-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "데이터 전처리",                startDate: "2026-06-W1", endDate: "2026-08-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "프로세스 설계",                startDate: "2026-08-W1", endDate: "2026-10-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "개발 및 AI 학습",              startDate: "2026-11-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "사용자 평가",                  startDate: "2027-01-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "'27.03 Go-Live",              startDate: "2027-03-W1", endDate: "2027-03-W2", assignee: "", status: "critical",    showOnLevel1: true  },
+    ],
+  },
+  {
+    id: g(), name: "AMS", color: C[3], assignee: "", status: "planned",
+    children: [
+      { id: g(), parentId: "", name: "계약 및 CSV 사전 준비", startDate: "2026-02-W1", endDate: "2026-04-W4", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "솔루션 I/F 설계",      startDate: "2026-05-W1", endDate: "2026-07-W4", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "테스트 검증",          startDate: "2026-08-W1", endDate: "2026-09-W2", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "CSV",                 startDate: "2026-09-W3", endDate: "2026-10-W2", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "26.10 Go-Live",       startDate: "2026-10-W1", endDate: "2026-10-W2", assignee: "", status: "critical", showOnLevel1: true  },
+    ],
+  },
+  {
+    id: g(), name: "LMS", color: C[4], assignee: "", status: "planned",
+    children: [
+      { id: g(), parentId: "", name: "Kick off 및 프로젝트 계획 수립",    startDate: "2026-01-W3", endDate: "2026-03-W2", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "LMS 구축 시작",                     startDate: "2026-03-W1", endDate: "2026-04-W4", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "시스템 테스트 수행",                 startDate: "2026-05-W1", endDate: "2026-08-W2", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "EDMS / MS AD 연동 Set up & 테스트", startDate: "2026-05-W1", endDate: "2026-08-W2", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "운영 환경 이관",                     startDate: "2026-08-W1", endDate: "2026-09-W1", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "26.9 Go-Live",                     startDate: "2026-09-W1", endDate: "2026-09-W2", assignee: "", status: "critical", showOnLevel1: true  },
+    ],
+  },
+  // ── 기존 MES / CMMS / NIR 과제 ────────────────────────────────
+  {
+    id: g(), name: "MES", color: C[5], assignee: "", status: "in-progress",
+    children: [
+      { id: g(), parentId: "", name: "MES TFT 창설",       startDate: "2026-02-W1", endDate: "2026-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "설비자산 업체 실사",   startDate: "2026-03-W1", endDate: "2026-04-W2", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "로드맵 상세화",        startDate: "2026-04-W1", endDate: "2026-05-W2", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "업체별 장단점 분석",   startDate: "2026-05-W3", endDate: "2026-07-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "URS 작성",            startDate: "2026-08-W1", endDate: "2026-10-W3", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "26.12 업체 선정",     startDate: "2026-11-W1", endDate: "2026-12-W4", assignee: "", status: "in-progress", showOnLevel1: true  },
+      { id: g(), parentId: "", name: "MES 구축 개시",        startDate: "2027-01-W1", endDate: "2027-01-W2", assignee: "", status: "critical",    showOnLevel1: true  },
+      { id: g(), parentId: "", name: "기능 디자인 설계",     startDate: "2027-01-W3", endDate: "2027-03-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "28.10 Go-Live",       startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical",    showOnLevel1: true  },
+    ],
+  },
+  {
+    id: g(), name: "CMMS", color: C[6], assignee: "", status: "planned",
+    children: [
+      { id: g(), parentId: "", name: "CMMS 적용 범위 설정",   startDate: "2026-03-W1", endDate: "2026-05-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "담당자 지정",           startDate: "2026-04-W1", endDate: "2026-05-W2", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "URS 의견 청취 및 작성", startDate: "2026-05-W3", endDate: "2026-07-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "26.10 업체 선정",       startDate: "2026-09-W1", endDate: "2026-10-W4", assignee: "", status: "in-progress", showOnLevel1: true  },
+      { id: g(), parentId: "", name: "26.12 업체 계약",       startDate: "2026-11-W1", endDate: "2026-12-W4", assignee: "", status: "critical",    showOnLevel1: true  },
+      { id: g(), parentId: "", name: "구축 계획 수립",        startDate: "2027-01-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "업무 프로세스 설계",    startDate: "2027-02-W1", endDate: "2027-05-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "27.12 Go-Live",        startDate: "2027-12-W1", endDate: "2027-12-W2", assignee: "", status: "critical",    showOnLevel1: true  },
+    ],
+  },
+  {
+    id: g(), name: "NIR", color: C[7], assignee: "", status: "planned",
+    children: [
+      { id: g(), parentId: "", name: "평가 항목 및 요구사항 검토", startDate: "2026-01-W1", endDate: "2026-03-W4", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "담당자 지정",              startDate: "2026-01-W3", endDate: "2026-02-W2", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "URS 작성",                 startDate: "2026-02-W3", endDate: "2026-04-W2", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "장비 구매",                startDate: "2026-04-W1", endDate: "2026-05-W4", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "평가 진행 및 가능성 검토", startDate: "2026-05-W1", endDate: "2026-09-W4", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "28년 생산 도입",           startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical", showOnLevel1: true  },
     ],
   },
 ];
 
-const STORAGE_KEY = "smart-timeline-v1";
+const STORAGE_KEY = "smart-timeline-v2"; // 버전 올려서 새 기본 데이터 적용
 
 function loadItems(): Level1Item[] {
   if (typeof window === "undefined") return DEFAULT_DATA;

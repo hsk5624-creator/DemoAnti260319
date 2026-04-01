@@ -59,12 +59,25 @@ export default function TimelineChart({
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [editTarget,    setEditTarget]    = useState<{ parentId: string; child: Level2Item } | null>(null);
   const [phaseTarget,   setPhaseTarget]   = useState<Level1Item | null>(null);
-  const [selectMode,    setSelectMode]    = useState(false);
-  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set()); // Level2 IDs
+  const [editMode,      setEditMode]      = useState(false);
+  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set());
+  // dragOffset: 'l1' = L1바 드래그, 'l2' = L2바 드래그
+  const [dragOffset, setDragOffset] = useState<
+    | { type: 'l1'; itemId: string; weekOffset: number }
+    | { type: 'l2'; childId: string; weekOffset: number }
+    | null
+  >(null);
 
-  const exitSelectMode = useCallback(() => {
-    setSelectMode(false);
+  // 최신 items / selectedIds를 드래그 핸들러(클로저) 안에서 참조하기 위한 ref
+  const itemsRef        = useRef(items);
+  const selectedIdsRef  = useRef(selectedIds);
+  itemsRef.current      = items;
+  selectedIdsRef.current = selectedIds;
+
+  const exitEditMode = useCallback(() => {
+    setEditMode(false);
     setSelectedIds(new Set());
+    setDragOffset(null);
   }, []);
 
   const toggleL2 = useCallback((id: string) => {
@@ -86,19 +99,95 @@ export default function TimelineChart({
     });
   }, []);
 
-  const applyShift = useCallback((weeks: number) => {
-    if (selectedIds.size === 0 || !onBulkShift) return;
-    const updates: BulkShiftUpdate[] = [];
-    for (const item of items)
-      for (const child of item.children)
-        if (selectedIds.has(child.id))
-          updates.push({
-            parentId: item.id, childId: child.id,
-            startDate: shiftDate(child.startDate, weeks),
-            endDate:   shiftDate(child.endDate,   weeks),
-          });
-    onBulkShift(updates);
-  }, [selectedIds, items, onBulkShift]);
+  // L2 바 드래그 핸들러
+  const handleBarMouseDown = useCallback((
+    e: React.MouseEvent,
+    childId: string,
+  ) => {
+    if (!editMode || !onBulkShift) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startX = e.clientX;
+    let lastOffset = 0;
+
+    const onMove = (ev: MouseEvent) => {
+      const newOffset = Math.round((ev.clientX - startX) / WEEK_W);
+      if (newOffset !== lastOffset) {
+        lastOffset = newOffset;
+        setDragOffset({ type: 'l2', childId, weekOffset: newOffset });
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setDragOffset(null);
+      if (lastOffset === 0) return;
+
+      const curSelected = selectedIdsRef.current;
+      const curItems    = itemsRef.current;
+      const idsToShift  = curSelected.size > 0 && curSelected.has(childId)
+        ? curSelected : new Set([childId]);
+
+      const updates: BulkShiftUpdate[] = [];
+      for (const item of curItems)
+        for (const child of item.children)
+          if (idsToShift.has(child.id))
+            updates.push({ parentId: item.id, childId: child.id,
+              startDate: shiftDate(child.startDate, lastOffset),
+              endDate:   shiftDate(child.endDate,   lastOffset) });
+
+      if (updates.length > 0) onBulkShift(updates);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [editMode, onBulkShift]);
+
+  // L1 바 드래그 — 소속 L2 전체 이동
+  const handleL1BarMouseDown = useCallback((
+    e: React.MouseEvent,
+    itemId: string,
+  ) => {
+    if (!editMode || !onBulkShift) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startX = e.clientX;
+    let lastOffset = 0;
+
+    const onMove = (ev: MouseEvent) => {
+      const newOffset = Math.round((ev.clientX - startX) / WEEK_W);
+      if (newOffset !== lastOffset) {
+        lastOffset = newOffset;
+        setDragOffset({ type: 'l1', itemId, weekOffset: newOffset });
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setDragOffset(null);
+      if (lastOffset === 0) return;
+
+      const curItems = itemsRef.current;
+      const targetItem = curItems.find(i => i.id === itemId);
+      if (!targetItem) return;
+
+      const updates: BulkShiftUpdate[] = targetItem.children.map(child => ({
+        parentId: itemId, childId: child.id,
+        startDate: shiftDate(child.startDate, lastOffset),
+        endDate:   shiftDate(child.endDate,   lastOffset),
+      }));
+
+      if (updates.length > 0) onBulkShift(updates);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [editMode, onBulkShift]);
+
   const [labelW,     setLabelW]     = useState(160);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
 
@@ -183,15 +272,15 @@ export default function TimelineChart({
             <Legend color="#ef4444" label="핵심" />
             {onBulkShift && (
               <button
-                onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+                onClick={() => editMode ? exitEditMode() : setEditMode(true)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border
-                  ${selectMode
+                  ${editMode
                     ? "bg-indigo-600 text-white border-indigo-600"
                     : "bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
-                {selectMode ? "선택 취소" : "일정 순연"}
+                {editMode ? "편집 종료" : "편집"}
               </button>
             )}
           </div>
@@ -276,13 +365,13 @@ export default function TimelineChart({
                     }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = `${item.color}22`)}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = isExpanded ? `${item.color}18` : `${item.color}0d`)}
-                    onClick={() => item.children.length > 0 && toggle(item.id)}
+                    onClick={() => !editMode && item.children.length > 0 && toggle(item.id)}
                   >
                     {/* 라벨 열 — 하단 L1_BASE_H 영역에 정렬 */}
                     <div style={{ width: labelW, minWidth: labelW, paddingTop: rowMsH }}
                       className="border-r border-gray-100 flex items-center gap-2 px-4 shrink-0">
-                      {/* 선택 모드 체크박스 */}
-                      {selectMode && item.children.length > 0 && (
+                      {/* 편집 모드 체크박스 */}
+                      {editMode && item.children.length > 0 && (
                         <input type="checkbox"
                           checked={item.children.every(c => selectedIds.has(c.id))}
                           ref={el => { if (el) el.indeterminate = item.children.some(c => selectedIds.has(c.id)) && !item.children.every(c => selectedIds.has(c.id)); }}
@@ -394,11 +483,24 @@ export default function TimelineChart({
 
                       {/* L1 Summary Bar */}
                       {range && (() => {
+                        // L1 드래그 미리보기 오프셋
+                        const l1Preview = dragOffset?.type === 'l1' && dragOffset.itemId === item.id
+                          ? dragOffset.weekOffset * WEEK_W : 0;
+
                         const sx   = wdateToIndex(parseWDate(range.start), base) * WEEK_W;
                         const ex   = wdateToIndex(parseWDate(range.end),   base) * WEEK_W + WEEK_W;
                         const barW = Math.max(ex - sx, WEEK_W * 2);
                         const phases = item.phases?.filter(p => p.startDate && p.endDate) ?? [];
                         const N = phases.length;
+
+                        const barStyle = {
+                          left: sx + l1Preview, top: barTop, width: barW, height: BAR1_H,
+                          cursor: editMode ? "ew-resize" : undefined,
+                          outline: l1Preview !== 0 ? `2px solid ${item.color}` : undefined,
+                        };
+                        const dragProps = editMode
+                          ? { onMouseDown: (e: React.MouseEvent) => handleL1BarMouseDown(e, item.id) }
+                          : {};
 
                         if (N === 0) {
                           // 기본: 단색 그라디언트 바
@@ -406,11 +508,11 @@ export default function TimelineChart({
                           const fits  = barW > label.length * 7.5 + 24;
                           return (
                             <>
-                              <div className="absolute z-10 rounded-lg overflow-hidden shadow-md"
-                                style={{ left: sx, top: barTop, width: barW, height: BAR1_H,
-                                  background: `linear-gradient(135deg, ${item.color}f0, ${item.color}c0)` }}>
+                              <div className={`absolute z-10 rounded-lg overflow-hidden shadow-md${editMode ? " hover:shadow-lg hover:ring-2 hover:ring-indigo-300" : ""}`}
+                                style={{ ...barStyle, background: `linear-gradient(135deg, ${item.color}f0, ${item.color}c0)` }}
+                                {...dragProps}>
                                 {fits && (
-                                  <div className="w-full h-full flex items-center justify-center">
+                                  <div className="w-full h-full flex items-center justify-center pointer-events-none">
                                     <span className="text-[12px] font-semibold text-white/90 tracking-tight px-2 truncate font-mono">
                                       {label}
                                     </span>
@@ -419,7 +521,7 @@ export default function TimelineChart({
                               </div>
                               {!fits && (
                                 <div className="absolute text-[12px] font-semibold whitespace-nowrap z-20 pointer-events-none font-mono"
-                                  style={{ left: sx + barW + 8, top: barTop + BAR1_H / 2,
+                                  style={{ left: sx + l1Preview + barW + 8, top: barTop + BAR1_H / 2,
                                     transform: "translateY(-50%)", color: item.color }}>
                                   {label}
                                 </div>
@@ -430,9 +532,9 @@ export default function TimelineChart({
 
                         // Phase 구간 바: 점층적으로 진해지는 색상
                         return (
-                          <div className="absolute z-10 rounded-lg overflow-hidden shadow-md"
-                            style={{ left: sx, top: barTop, width: barW, height: BAR1_H,
-                              backgroundColor: `${item.color}22` }}>
+                          <div className={`absolute z-10 rounded-lg overflow-hidden shadow-md${editMode ? " hover:shadow-lg hover:ring-2 hover:ring-indigo-300" : ""}`}
+                            style={{ ...barStyle, backgroundColor: `${item.color}22` }}
+                            {...dragProps}>
                             {phases.map((phase, i) => {
                               const alpha = N === 1 ? 0.85 : 0.32 + (i / (N - 1)) * 0.58;
                               const alphHex = Math.round(alpha * 255).toString(16).padStart(2, "0");
@@ -472,18 +574,29 @@ export default function TimelineChart({
                       const barTop = (L2_H - BAR2_H) / 2;
                       const labelAboveY = barTop - 14;
 
+                      // 드래그 미리보기 오프셋 계산
+                      const isDragThis  = dragOffset?.type === 'l2' && dragOffset.childId === child.id;
+                      const isDragGroup = dragOffset?.type === 'l2' && selectedIds.has(dragOffset.childId) && selectedIds.has(child.id);
+                      const isDragParent = dragOffset?.type === 'l1' && dragOffset.itemId === item.id;
+                      const previewPx = (isDragThis || isDragGroup || isDragParent)
+                        ? (dragOffset?.weekOffset ?? 0) * WEEK_W : 0;
+
                       return (
                         <div key={child.id}
-                          className={`flex border-t border-gray-100 group cursor-pointer transition-colors duration-100
+                          className={`flex border-t border-gray-100 group transition-colors duration-100
                             ${cIdx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}
-                            hover:bg-blue-50/50`}
+                            ${editMode ? "" : "cursor-pointer hover:bg-blue-50/50"}`}
                           style={{ height: L2_H }}
-                          onClick={e => { e.stopPropagation(); setEditTarget({ parentId: item.id, child }); }}
+                          onClick={e => {
+                            if (editMode) return; // 편집 모드에서는 클릭 무시
+                            e.stopPropagation();
+                            setEditTarget({ parentId: item.id, child });
+                          }}
                         >
                           {/* 라벨 */}
                           <div style={{ width: labelW, minWidth: labelW }}
                             className="border-r border-gray-100 flex items-center px-3 gap-2 shrink-0">
-                            {selectMode ? (
+                            {editMode ? (
                               <input type="checkbox"
                                 checked={selectedIds.has(child.id)}
                                 onChange={e => { e.stopPropagation(); toggleL2(child.id); }}
@@ -512,15 +625,23 @@ export default function TimelineChart({
                                 style={{ left: todayX }} />
                             )}
 
-                            {/* pill 바 */}
-                            <div className="absolute z-10 rounded-full shadow-sm"
-                              style={{ left: sx, top: barTop, width: barW, height: BAR2_H,
-                                backgroundColor: color, opacity: 0.8 }} />
+                            {/* pill 바 (드래그 가능) */}
+                            <div
+                              className={`absolute z-10 rounded-full shadow-sm transition-shadow
+                                ${editMode ? "cursor-ew-resize hover:shadow-md hover:ring-2 hover:ring-indigo-300" : ""}`}
+                              style={{
+                                left: sx + previewPx, top: barTop, width: barW, height: BAR2_H,
+                                backgroundColor: color,
+                                opacity: previewPx !== 0 ? 1 : 0.8,
+                                outline: previewPx !== 0 ? `2px solid ${color}` : undefined,
+                              }}
+                              onMouseDown={e => handleBarMouseDown(e, child.id)}
+                            />
 
                             {/* 과제명 라벨 — 바 위 */}
                             <div className="absolute text-[11px] font-semibold whitespace-nowrap z-20 pointer-events-none"
                               style={{
-                                left: sx + barW / 2,
+                                left: sx + previewPx + barW / 2,
                                 top: Math.max(2, labelAboveY),
                                 transform: "translateX(-50%)",
                                 color,
@@ -551,46 +672,20 @@ export default function TimelineChart({
         </div>
       </div>
 
-      {/* 일정 순연 패널 */}
-      {selectMode && (
-        <div className="sticky bottom-0 z-40 border-t border-indigo-100 bg-white/97 backdrop-blur-sm px-4 py-3 flex flex-wrap items-center gap-2 shadow-lg">
-          <span className="text-sm font-bold text-indigo-700 shrink-0">
-            {selectedIds.size > 0 ? `${selectedIds.size}개 선택됨` : "과제를 선택하세요"}
+      {/* 편집 모드 안내 패널 */}
+      {editMode && (
+        <div className="sticky bottom-0 z-40 border-t border-indigo-100 bg-indigo-50/90 backdrop-blur-sm px-4 py-2.5 flex items-center gap-3">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth={2.5} className="shrink-0">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-xs text-indigo-700 font-medium flex-1">
+            바를 좌우로 드래그해 1주 단위로 이동 &nbsp;·&nbsp;
+            체크박스 선택 시 함께 이동 &nbsp;·&nbsp;
+            {selectedIds.size > 0 && <strong>{selectedIds.size}개 선택됨</strong>}
           </span>
-          <div className="w-px h-5 bg-gray-200 shrink-0" />
-          <span className="text-xs text-gray-500 shrink-0 font-medium">앞당기기</span>
-          {[
-            { label: "3개월", weeks: -12 },
-            { label: "1개월", weeks: -4 },
-            { label: "2주",   weeks: -2 },
-            { label: "1주",   weeks: -1 },
-          ].map(({ label, weeks }) => (
-            <button key={label}
-              onClick={() => applyShift(weeks)}
-              disabled={selectedIds.size === 0}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-orange-50 text-orange-600 hover:bg-orange-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors border border-orange-100">
-              ← {label}
-            </button>
-          ))}
-          <div className="w-px h-5 bg-gray-200 shrink-0" />
-          <span className="text-xs text-gray-500 shrink-0 font-medium">미루기</span>
-          {[
-            { label: "1주",   weeks: 1 },
-            { label: "2주",   weeks: 2 },
-            { label: "1개월", weeks: 4 },
-            { label: "3개월", weeks: 12 },
-          ].map(({ label, weeks }) => (
-            <button key={label}
-              onClick={() => applyShift(weeks)}
-              disabled={selectedIds.size === 0}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors border border-green-100">
-              {label} →
-            </button>
-          ))}
-          <div className="flex-1" />
-          <button onClick={exitSelectMode}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
-            완료
+          <button onClick={exitEditMode}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shrink-0">
+            편집 종료
           </button>
         </div>
       )}
