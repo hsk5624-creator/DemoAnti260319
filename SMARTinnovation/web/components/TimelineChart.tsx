@@ -15,6 +15,7 @@ interface Props {
   onEditLevel1Phases?: (id: string, phases: PhaseSegment[]) => void;
   onBulkShift?: (updates: BulkShiftUpdate[]) => void;
   onReorderLevel1?: (draggingId: string, dropBeforeId: string | null) => void;
+  onEditLevel1Color?: (id: string, color: string) => void;
 }
 
 const WEEK_W    = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
@@ -26,6 +27,13 @@ const MS_ROW_H  = 28;   // 마일스톤 한 줄 높이
 const PHASE_H   = 30;   // Phase 헤더 행 높이
 const MIN_LABEL_W = 80;
 const FLAG_ITEM_W = 130; // 플래그 겹침 판단 폭
+
+const PALETTE = [
+  "#00733C", "#16a34a", "#0891b2", "#0284c7",
+  "#2563eb", "#4f46e5", "#7c3aed", "#9333ea",
+  "#db2777", "#e11d48", "#ef4444", "#ea580c",
+  "#d97706", "#ca8a04", "#0f766e", "#475569",
+];
 
 // YY.MM 포맷
 function fmtMonth(wd: WDate) {
@@ -57,6 +65,7 @@ export default function TimelineChart({
   onEditLevel1Phases,
   onBulkShift,
   onReorderLevel1,
+  onEditLevel1Color,
 }: Props) {
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [editTarget,    setEditTarget]    = useState<{ parentId: string; child: Level2Item } | null>(null);
@@ -69,6 +78,10 @@ export default function TimelineChart({
     | { type: 'l2'; childId: string; weekOffset: number }
     | null
   >(null);
+
+  // 색상 피커
+  const [colorPickerId,  setColorPickerId]  = useState<string | null>(null);
+  const [colorPickerPos, setColorPickerPos] = useState<{ x: number; y: number } | null>(null);
 
   // L1 행 순서 변경 드래그 상태
   const [reorderDraggingId,  setReorderDraggingId]  = useState<string | null>(null);
@@ -432,7 +445,18 @@ export default function TimelineChart({
                           className="w-4 h-4 accent-indigo-600 shrink-0 cursor-pointer"
                         />
                       )}
-                      <div className="w-[3px] h-8 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                      <div
+                        className="w-[4px] h-8 rounded-full shrink-0 cursor-pointer hover:w-[6px] transition-all"
+                        style={{ backgroundColor: item.color }}
+                        title="색상 변경"
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (colorPickerId === item.id) { setColorPickerId(null); setColorPickerPos(null); return; }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setColorPickerId(item.id);
+                          setColorPickerPos({ x: rect.right + 10, y: rect.top });
+                        }}
+                      />
                       <span className="text-[16px] font-bold text-gray-800 truncate flex-1 tracking-tight">
                         {item.name}
                       </span>
@@ -776,6 +800,39 @@ export default function TimelineChart({
           onSave={phases => { onEditLevel1Phases?.(phaseTarget.id, phases); setPhaseTarget(null); }}
           onClose={() => setPhaseTarget(null)}
         />
+      )}
+
+      {/* 색상 피커 팝오버 */}
+      {colorPickerId && colorPickerPos && (
+        <>
+          <div className="fixed inset-0 z-40"
+            onClick={() => { setColorPickerId(null); setColorPickerPos(null); }} />
+          <div className="fixed z-50 bg-white rounded-2xl shadow-2xl border border-gray-200 p-3"
+            style={{ left: colorPickerPos.x, top: colorPickerPos.y }}>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-0.5">색상 선택</p>
+            <div className="grid grid-cols-4 gap-2">
+              {PALETTE.map(c => {
+                const isActive = items.find(i => i.id === colorPickerId)?.color === c;
+                return (
+                  <button key={c}
+                    onClick={e => {
+                      e.stopPropagation();
+                      onEditLevel1Color?.(colorPickerId, c);
+                      setColorPickerId(null);
+                      setColorPickerPos(null);
+                    }}
+                    className="w-7 h-7 rounded-full transition-transform hover:scale-110 focus:outline-none"
+                    style={{
+                      backgroundColor: c,
+                      boxShadow: isActive ? `0 0 0 3px white, 0 0 0 5px ${c}` : undefined,
+                      transform: isActive ? "scale(1.15)" : undefined,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
     </>
   );

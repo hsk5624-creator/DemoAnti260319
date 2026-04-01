@@ -220,6 +220,10 @@ export default function Home() {
     [saveUndo],
   );
 
+  const handleEditLevel1Color = useCallback((id: string, color: string) => {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, color } : item));
+  }, []);
+
   const handleReorderLevel1 = useCallback((draggingId: string, dropBeforeId: string | null) => {
     setItems(prev => {
       const fromIdx = prev.findIndex(i => i.id === draggingId);
@@ -302,6 +306,7 @@ export default function Home() {
             onEditLevel1Phases={handleEditLevel1Phases}
             onBulkShift={handleBulkShift}
             onReorderLevel1={handleReorderLevel1}
+            onEditLevel1Color={handleEditLevel1Color}
           />
         </div>
       </main>
