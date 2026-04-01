@@ -661,7 +661,7 @@ export default function TimelineChart({
                   {/* ── Level 2 슬라이드 ── */}
                   <div style={{
                     maxHeight: isExpanded ? `${l2TotalH}px` : "0px",
-                    overflow: "hidden",
+                    overflow: "clip",
                     transition: "max-height 0.3s cubic-bezier(0.4,0,0.2,1)",
                   }}>
                     {item.children.map((child, cIdx) => {
@@ -784,7 +784,7 @@ export default function TimelineChart({
                           <div style={{
                             maxHeight: expandedL2.has(child.id)
                               ? `${child.children!.length * L3_H}px` : "0px",
-                            overflow: "hidden",
+                            overflow: "clip",
                             transition: "max-height 0.25s cubic-bezier(0.4,0,0.2,1)",
                           }}>
                             {child.children!.map((l3, l3Idx) => {
