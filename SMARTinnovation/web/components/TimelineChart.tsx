@@ -437,8 +437,8 @@ export default function TimelineChart({
                     onClick={() => !editMode && item.children.length > 0 && toggle(item.id)}
                   >
                     {/* 라벨 열 — 하단 L1_BASE_H 영역에 정렬 */}
-                    <div style={{ width: labelW, minWidth: labelW, paddingTop: rowMsH, backgroundColor: '#ffffff' }}
-                      className="sticky left-0 z-20 border-r border-gray-100 flex items-center gap-2 px-4 shrink-0">
+                    <div style={{ width: labelW, minWidth: labelW, paddingTop: rowMsH }}
+                      className="sticky left-0 z-20 bg-white border-r border-gray-100 flex items-center gap-2 px-4 shrink-0">
                       {/* 행 순서 변경 드래그 핸들 */}
                       {!editMode && onReorderLevel1 && (
                         <div
@@ -695,8 +695,8 @@ export default function TimelineChart({
                           }}
                         >
                           {/* 라벨 */}
-                          <div style={{ width: labelW, minWidth: labelW, backgroundColor: cIdx % 2 === 0 ? '#ffffff' : '#f8fafc' }}
-                            className="sticky left-0 z-10 border-r border-gray-100 flex items-center px-3 gap-2 shrink-0">
+                          <div style={{ width: labelW, minWidth: labelW }}
+                            className="sticky left-0 z-10 bg-white border-r border-gray-100 flex items-center px-3 gap-2 shrink-0">
                             {editMode ? (
                               <input type="checkbox"
                                 checked={selectedIds.has(child.id)}
@@ -797,8 +797,8 @@ export default function TimelineChart({
                                   className={`flex border-t border-gray-100 ${l3Idx % 2 === 0 ? "bg-slate-50/30" : "bg-white"}`}
                                   style={{ height: L3_H }}>
                                   {/* L3 라벨 */}
-                                  <div style={{ width: labelW, minWidth: labelW, backgroundColor: l3Idx % 2 === 0 ? '#f8fafc' : '#ffffff' }}
-                                    className="sticky left-0 z-10 border-r border-gray-100 flex items-center px-3 gap-1.5 shrink-0 pl-8">
+                                  <div style={{ width: labelW, minWidth: labelW }}
+                                    className="sticky left-0 z-10 bg-white border-r border-gray-100 flex items-center px-3 gap-1.5 shrink-0 pl-8">
                                     <div className="w-px h-3 bg-gray-200 shrink-0" />
                                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c3 }} />
                                     <span className="text-[10px] text-gray-500 truncate flex-1">{l3.name}</span>
