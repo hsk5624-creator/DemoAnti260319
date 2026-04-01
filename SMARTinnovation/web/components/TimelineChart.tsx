@@ -17,6 +17,7 @@ interface Props {
   onBulkShift?: (updates: BulkShiftUpdate[]) => void;
   onReorderLevel1?: (draggingId: string, dropBeforeId: string | null) => void;
   onEditLevel1Color?: (id: string, color: string) => void;
+  onEditLevel1?: (updated: Level1Item) => void;
 }
 
 const WEEK_W    = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
@@ -69,10 +70,12 @@ export default function TimelineChart({
   onBulkShift,
   onReorderLevel1,
   onEditLevel1Color,
+  onEditLevel1,
 }: Props) {
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [expandedL2,    setExpandedL2]    = useState<Set<string>>(new Set());
   const [editTarget,    setEditTarget]    = useState<{ parentId: string; child: Level2Item } | null>(null);
+  const [l1EditTarget,  setL1EditTarget]  = useState<Level1Item | null>(null);
   const [phaseTarget,   setPhaseTarget]   = useState<Level1Item | null>(null);
   const [editMode,      setEditMode]      = useState(false);
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set());
@@ -470,6 +473,17 @@ export default function TimelineChart({
                       <span className="text-[16px] font-bold text-gray-800 truncate flex-1 tracking-tight">
                         {item.name}
                       </span>
+                      {/* L1 수정 버튼 */}
+                      {onEditLevel1 && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setL1EditTarget(item); }}
+                          className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md hover:bg-black/10 text-gray-400 hover:text-gray-600 transition-all shrink-0"
+                          title="그룹 과제 수정">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      )}
                       {/* Phase 설정 버튼 */}
                       {onEditLevel1Phases && (
                         <button
@@ -865,6 +879,15 @@ export default function TimelineChart({
         />
       )}
 
+      {/* L1 수정 모달 */}
+      {l1EditTarget && (
+        <EditLevel1Modal
+          item={l1EditTarget}
+          onSave={updated => { onEditLevel1?.(updated); setL1EditTarget(null); }}
+          onClose={() => setL1EditTarget(null)}
+        />
+      )}
+
       {/* Phase 설정 모달 */}
       {phaseTarget && (
         <PhaseEditorModal
@@ -1052,6 +1075,67 @@ function WPicker({ value, onChange }: { value: number; onChange: (w: number) => 
           {w}W
         </button>
       ))}
+    </div>
+  );
+}
+
+/* ── Lv1 수정 모달 ── */
+function EditLevel1Modal({ item, onSave, onClose }: {
+  item: Level1Item;
+  onSave: (updated: Level1Item) => void;
+  onClose: () => void;
+}) {
+  const [name,     setName]     = useState(item.name);
+  const [assignee, setAssignee] = useState(item.assignee);
+  const [status,   setStatus]   = useState<TaskStatus>(item.status);
+
+  const inp = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#00733C] focus:ring-1 focus:ring-[#00733C] outline-none";
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSave({ ...item, name: name.trim(), assignee: assignee.trim(), status });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/25 backdrop-blur-sm" />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+            <div>
+              <h3 className="text-base font-bold text-gray-900">그룹 과제 수정</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">색상은 차트에서 색상 바를 클릭해 변경</p>
+            </div>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-lg">×</button>
+        </div>
+        <form onSubmit={handleSave} className="space-y-3.5">
+          <Lbl label="그룹명">
+            <input value={name} onChange={e => setName(e.target.value)} className={inp} required autoFocus />
+          </Lbl>
+          <Lbl label="담당자">
+            <input value={assignee} onChange={e => setAssignee(e.target.value)} placeholder="담당자명 (선택)" className={inp} />
+          </Lbl>
+          <Lbl label="상태">
+            <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)} className={inp}>
+              <option value="planned">예정</option>
+              <option value="in-progress">진행중</option>
+              <option value="completed">완료</option>
+              <option value="critical">핵심 마일스톤</option>
+            </select>
+          </Lbl>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium">취소</button>
+            <button type="submit"
+              className="flex-1 py-2.5 rounded-xl bg-[#00733C] hover:bg-[#005a2e] text-white text-sm font-bold transition-colors">저장</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

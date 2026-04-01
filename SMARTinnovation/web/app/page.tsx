@@ -257,6 +257,10 @@ export default function Home() {
     });
   }, [saveUndo]);
 
+  const handleEditLevel1 = useCallback((updated: Level1Item) => {
+    setItems(prev => prev.map(item => item.id === updated.id ? updated : item));
+  }, []);
+
   const handleEditLevel1Color = useCallback((id: string, color: string) => {
     setItems(prev => prev.map(item => item.id === id ? { ...item, color } : item));
   }, []);
@@ -344,6 +348,7 @@ export default function Home() {
             onBulkShift={handleBulkShift}
             onReorderLevel1={handleReorderLevel1}
             onEditLevel1Color={handleEditLevel1Color}
+            onEditLevel1={handleEditLevel1}
           />
         </div>
       </main>
