@@ -107,9 +107,22 @@ const DEFAULT_DATA: Level1Item[] = [
       { id: g(), parentId: "", name: "28년 생산 도입",           startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical", showOnLevel1: true  },
     ],
   },
+  {
+    id: g(), name: "진천 Window 구축", color: C[8], assignee: "", status: "in-progress",
+    children: [
+      { id: g(), parentId: "", name: "변경관리 준비",                        startDate: "2026-01-W1", endDate: "2026-02-W2", assignee: "", status: "in-progress", showOnLevel1: false },
+      { id: g(), parentId: "", name: "변경관리 개시 및 URS 작성",            startDate: "2026-02-W1", endDate: "2026-05-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "비교견적 및 업체선정",                  startDate: "2026-07-W1", endDate: "2026-08-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "관련 문서 개정, 장비 설치 및 적격성 평가", startDate: "2026-07-W1", endDate: "2026-09-W2", assignee: "", status: "planned",  showOnLevel1: false },
+      { id: g(), parentId: "", name: "신규 장비 운용 (과립/혼합 라인)",       startDate: "2026-09-W1", endDate: "2026-09-W2", assignee: "", status: "critical",    showOnLevel1: true  },
+      { id: g(), parentId: "", name: "변경관리 개시 및 URS 작성 (2차)",       startDate: "2027-01-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
+      { id: g(), parentId: "", name: "관련 문서 개정, 장비 설치 및 적격성 평가 (2차)", startDate: "2027-03-W1", endDate: "2027-04-W2", assignee: "", status: "planned", showOnLevel1: false },
+      { id: g(), parentId: "", name: "신규 장비 운용 (충전/선별 라인)",       startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical",    showOnLevel1: true  },
+    ],
+  },
 ];
 
-const STORAGE_KEY = "smart-timeline-v2"; // 버전 올려서 새 기본 데이터 적용
+const STORAGE_KEY = "smart-timeline-v3"; // 진천 Window 구축 추가
 
 function loadItems(): Level1Item[] {
   if (typeof window === "undefined") return DEFAULT_DATA;
@@ -207,6 +220,22 @@ export default function Home() {
     [saveUndo],
   );
 
+  const handleReorderLevel1 = useCallback((draggingId: string, dropBeforeId: string | null) => {
+    setItems(prev => {
+      const fromIdx = prev.findIndex(i => i.id === draggingId);
+      if (fromIdx < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      if (dropBeforeId === null) {
+        next.push(moved);
+      } else {
+        const toIdx = next.findIndex(i => i.id === dropBeforeId);
+        next.splice(toIdx < 0 ? next.length : toIdx, 0, moved);
+      }
+      return next;
+    });
+  }, []);
+
   const handleEditLevel2 = useCallback((parentId: string, updated: Level2Item) => {
     setItems((prev) =>
       prev.map((item) => {
@@ -272,6 +301,7 @@ export default function Home() {
             onEditLevel2={handleEditLevel2}
             onEditLevel1Phases={handleEditLevel1Phases}
             onBulkShift={handleBulkShift}
+            onReorderLevel1={handleReorderLevel1}
           />
         </div>
       </main>

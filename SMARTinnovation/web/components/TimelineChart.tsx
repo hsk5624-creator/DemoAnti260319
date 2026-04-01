@@ -14,6 +14,7 @@ interface Props {
   onEditLevel2?: (parentId: string, updated: Level2Item) => void;
   onEditLevel1Phases?: (id: string, phases: PhaseSegment[]) => void;
   onBulkShift?: (updates: BulkShiftUpdate[]) => void;
+  onReorderLevel1?: (draggingId: string, dropBeforeId: string | null) => void;
 }
 
 const WEEK_W    = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
@@ -55,6 +56,7 @@ export default function TimelineChart({
   onEditLevel2,
   onEditLevel1Phases,
   onBulkShift,
+  onReorderLevel1,
 }: Props) {
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [editTarget,    setEditTarget]    = useState<{ parentId: string; child: Level2Item } | null>(null);
@@ -67,6 +69,11 @@ export default function TimelineChart({
     | { type: 'l2'; childId: string; weekOffset: number }
     | null
   >(null);
+
+  // L1 행 순서 변경 드래그 상태
+  const [reorderDraggingId,  setReorderDraggingId]  = useState<string | null>(null);
+  const [reorderDropBeforeId, setReorderDropBeforeId] = useState<string | null | "END">("END");
+  const reorderDragRef = useRef<{ draggingId: string; dropBeforeId: string | null } | null>(null);
 
   // 최신 items / selectedIds를 드래그 핸들러(클로저) 안에서 참조하기 위한 ref
   const itemsRef        = useRef(items);
@@ -187,6 +194,27 @@ export default function TimelineChart({
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   }, [editMode, onBulkShift]);
+
+  // L1 행 순서 변경 드래그
+  const handleRowDragStart = useCallback((e: React.MouseEvent, itemId: string) => {
+    if (editMode || !onReorderLevel1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setReorderDraggingId(itemId);
+    setReorderDropBeforeId("END");
+    reorderDragRef.current = { draggingId: itemId, dropBeforeId: null };
+
+    const onUp = () => {
+      window.removeEventListener("mouseup", onUp);
+      if (reorderDragRef.current) {
+        onReorderLevel1(reorderDragRef.current.draggingId, reorderDragRef.current.dropBeforeId);
+      }
+      reorderDragRef.current = null;
+      setReorderDraggingId(null);
+      setReorderDropBeforeId("END");
+    };
+    window.addEventListener("mouseup", onUp);
+  }, [editMode, onReorderLevel1]);
 
   const [labelW,     setLabelW]     = useState(160);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
@@ -330,6 +358,8 @@ export default function TimelineChart({
             </div>
 
             {/* ━━━ 본문 (L1 + L2) ━━━ */}
+            {/* 순서 변경 드래그 중: 전체 차트에 grabbing 커서 */}
+            <style>{reorderDraggingId ? "* { cursor: grabbing !important; }" : ""}</style>
             {items.map((item, itemIdx) => {
               const range      = getLevel1Range(item);
               const isExpanded = expanded.has(item.id);
@@ -354,7 +384,20 @@ export default function TimelineChart({
 
               return (
                 <div key={item.id}
-                  style={{ borderTop: itemIdx > 0 ? `2px solid ${item.color}30` : undefined }}>
+                  style={{
+                    borderTop: reorderDropBeforeId === item.id
+                      ? "2px solid #6366f1"
+                      : itemIdx > 0 ? `2px solid ${item.color}30` : undefined,
+                    opacity: reorderDraggingId === item.id ? 0.35 : 1,
+                    transition: "opacity 0.15s",
+                  }}
+                  onMouseEnter={() => {
+                    if (reorderDragRef.current && reorderDragRef.current.draggingId !== item.id) {
+                      reorderDragRef.current.dropBeforeId = item.id;
+                      setReorderDropBeforeId(item.id);
+                    }
+                  }}
+                >
 
                   {/* ── Level 1 행 ── */}
                   <div
@@ -370,6 +413,15 @@ export default function TimelineChart({
                     {/* 라벨 열 — 하단 L1_BASE_H 영역에 정렬 */}
                     <div style={{ width: labelW, minWidth: labelW, paddingTop: rowMsH }}
                       className="border-r border-gray-100 flex items-center gap-2 px-4 shrink-0">
+                      {/* 행 순서 변경 드래그 핸들 */}
+                      {!editMode && onReorderLevel1 && (
+                        <div
+                          onMouseDown={e => handleRowDragStart(e, item.id)}
+                          className="opacity-0 group-hover:opacity-50 hover:!opacity-100 shrink-0 flex flex-col gap-[3px] py-1 px-0.5 cursor-grab active:cursor-grabbing"
+                          title="드래그하여 순서 변경">
+                          {[0,1,2].map(i => <div key={i} className="w-3 h-[2px] bg-gray-400 rounded-full" />)}
+                        </div>
+                      )}
                       {/* 편집 모드 체크박스 */}
                       {editMode && item.children.length > 0 && (
                         <input type="checkbox"
@@ -668,6 +720,22 @@ export default function TimelineChart({
                 </div>
               );
             })}
+            {/* 맨 아래 드롭존 — 마지막 순서로 이동 */}
+            {reorderDraggingId && (
+              <div
+                style={{
+                  height: 16,
+                  borderTop: reorderDropBeforeId === "END" ? "2px solid #6366f1" : undefined,
+                  transition: "border-top 0.1s",
+                }}
+                onMouseEnter={() => {
+                  if (reorderDragRef.current) {
+                    reorderDragRef.current.dropBeforeId = null;
+                    setReorderDropBeforeId("END");
+                  }
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
