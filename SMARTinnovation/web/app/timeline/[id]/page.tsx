@@ -6,7 +6,13 @@ import { Level1Item, Level2Item, Level3Item, PhaseSegment, CATEGORY_COLORS, gene
 import TimelineForm from "@/components/TimelineForm";
 import TimelineChart from "@/components/TimelineChart";
 import TaskList from "@/components/TaskList";
-import { loadTimelines, saveTimelines, LEGACY_TIMELINE_ID } from "@/lib/timelines";
+import {
+  loadTimelines, loadTimelineData, saveTimelineData,
+  updateTimelineName, updateTimelineEditPassword,
+  acquireEditLock, releaseEditLock, renewEditLock,
+  getSessionId, LEGACY_TIMELINE_ID,
+} from "@/lib/timelines";
+import SuggestionsBoard from "@/components/SuggestionsBoard";
 
 const C = CATEGORY_COLORS;
 const g = generateId;
@@ -130,49 +136,86 @@ export default function TimelinePage() {
   const searchParams = useSearchParams();
   const id           = Array.isArray(params.id) ? params.id[0] : (params.id ?? "");
   const readOnly     = searchParams.get("edit") !== "1";
-  const storageKey = `smart-timeline-data-${id}`;
+
+  // 탭 상태
+  const [activeTab, setActiveTab] = useState<"timeline" | "suggestions">("timeline");
 
   const [timelineName, setTimelineName] = useState("");
   const [editingName, setEditingName]   = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // 타임라인 이름 로드
+  // 편집 비밀번호 변경 모달
+  const [changePwOpen, setChangePwOpen] = useState(false);
+  const [newPw,        setNewPw]        = useState("");
+  const [confirmPw,    setConfirmPw]    = useState("");
+  const [changePwErr,  setChangePwErr]  = useState("");
+
+  // 편집 잠금 상태
+  const [lockBlocked, setLockBlocked] = useState(false);
+  const sessionId = typeof window !== "undefined" ? getSessionId() : "";
+  const lockRenewRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 데이터 로딩 상태
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  // 타임라인 이름 + 데이터 로드
   useEffect(() => {
-    const list = loadTimelines();
-    const found = list.find(t => t.id === id);
-    setTimelineName(found?.name ?? "타임라인");
+    if (!id) return;
+    (async () => {
+      const list = await loadTimelines();
+      const found = list.find(t => t.id === id);
+      setTimelineName(found?.name ?? "타임라인");
+
+      // 편집 모드면 잠금 획득 시도
+      if (!readOnly) {
+        const result = await acquireEditLock(id, sessionId);
+        if (!result.ok) {
+          setLockBlocked(true);
+          return;
+        }
+        // 15분마다 잠금 갱신
+        lockRenewRef.current = setInterval(() => renewEditLock(id, sessionId), 15 * 60 * 1000);
+      }
+
+      // Supabase에서 데이터 로드
+      const remote = await loadTimelineData(id);
+      if (remote && Array.isArray(remote) && remote.length > 0) {
+        setItems(remote as Level1Item[]);
+      } else if (id === LEGACY_TIMELINE_ID) {
+        // legacy: localStorage 마이그레이션
+        try {
+          const raw = localStorage.getItem("smart-timeline-v3") ?? localStorage.getItem(`smart-timeline-data-${id}`);
+          if (raw) {
+            const parsed = JSON.parse(raw) as Level1Item[];
+            setItems(parsed);
+            await saveTimelineData(id, parsed); // Supabase에 올려두기
+          }
+        } catch {}
+      }
+      setDataLoaded(true);
+    })();
+
+    return () => {
+      if (lockRenewRef.current) clearInterval(lockRenewRef.current);
+      if (!readOnly) releaseEditLock(id, sessionId);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  function loadItems(): Level1Item[] {
-    if (typeof window === "undefined") return id === LEGACY_TIMELINE_ID ? DEFAULT_DATA : [];
-    try {
-      // 기존 v3 데이터 마이그레이션 (manufacturing id)
-      if (id === LEGACY_TIMELINE_ID) {
-        const legacy = localStorage.getItem("smart-timeline-v3");
-        if (legacy) {
-          const parsed = JSON.parse(legacy) as Level1Item[];
-          localStorage.setItem(storageKey, legacy);
-          return parsed;
-        }
-      }
-      const raw = localStorage.getItem(storageKey);
-      if (raw) return JSON.parse(raw) as Level1Item[];
-    } catch {}
-    return id === LEGACY_TIMELINE_ID ? DEFAULT_DATA : [];
-  }
-
-  const [items, setItems] = useState<Level1Item[]>(loadItems);
+  const [items, setItems] = useState<Level1Item[]>(id === LEGACY_TIMELINE_ID ? DEFAULT_DATA : []);
   const [undoSnapshot, setUndoSnapshot] = useState<Level1Item[] | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 변경될 때마다 localStorage에 저장
+  // 변경될 때마다 Supabase에 저장 (debounce 2초)
   useEffect(() => {
-    if (!id) return;
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(items));
-    } catch {}
-  }, [items, storageKey, id]);
+    if (!id || !dataLoaded || readOnly) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveTimelineData(id, items);
+    }, 2000);
+  }, [items, id, dataLoaded, readOnly]);
 
   // 삭제 전 스냅샷 저장 + 토스트 표시
   const saveUndo = useCallback((prev: Level1Item[], msg: string) => {
@@ -427,32 +470,50 @@ export default function TimelinePage() {
     );
   }, []);
 
+  // 편집 잠금 차단 화면
+  if (lockBlocked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+          <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mx-auto mb-4">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth={2.2}>
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0110 0v4" />
+            </svg>
+          </div>
+          <h2 className="text-base font-bold text-gray-900 mb-2">편집 중인 사용자가 있습니다</h2>
+          <p className="text-sm text-gray-500 mb-5">다른 사용자가 이 타임라인을 편집 중입니다.<br/>잠시 후 다시 시도하거나 조회 모드로 접속하세요.</p>
+          <div className="flex gap-2">
+            <button onClick={() => router.push("/")}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 font-medium">홈으로</button>
+            <button onClick={() => router.push(`/timeline/${id}`)}
+              className="flex-1 py-2.5 rounded-xl bg-[#00733C] text-white text-sm font-bold hover:bg-[#005a2e] transition-colors">조회 모드</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50/70">
       {/* 되돌리기 토스트 */}
       {toastMsg && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3
-          bg-gray-900 text-white text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-700
-          animate-in fade-in slide-in-from-bottom-4 duration-200">
+          bg-gray-900 text-white text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-700">
           <span className="text-gray-200">{toastMsg}</span>
-          <button
-            onClick={handleUndo}
+          <button onClick={handleUndo}
             className="text-green-400 font-bold hover:text-green-300 transition-colors whitespace-nowrap border-l border-gray-700 pl-3">
             되돌리기
           </button>
-          <button
-            onClick={() => { setToastMsg(null); setUndoSnapshot(null); }}
-            className="text-gray-500 hover:text-gray-300 transition-colors text-base leading-none">
-            ×
-          </button>
+          <button onClick={() => { setToastMsg(null); setUndoSnapshot(null); }}
+            className="text-gray-500 hover:text-gray-300 transition-colors text-base leading-none">×</button>
         </div>
       )}
+
       {/* 헤더 */}
       <header className="bg-[#00733C] text-white shadow-lg">
         <div className="w-full px-5 py-3 flex items-center gap-4">
-          {/* 홈 버튼 */}
-          <button
-            onClick={() => router.push("/")}
+          <button onClick={() => router.push("/")}
             className="flex items-center gap-1.5 text-green-200 hover:text-white transition-colors shrink-0">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -460,29 +521,28 @@ export default function TimelinePage() {
             <span className="text-xs font-medium">홈</span>
           </button>
           <div className="w-px h-5 bg-green-600" />
+
           {/* 타임라인 이름 */}
           <div className="flex-1">
             {editingName ? (
               <input
                 ref={nameInputRef}
                 defaultValue={timelineName}
-                onBlur={e => {
+                onBlur={async e => {
                   const val = e.target.value.trim() || timelineName;
                   setTimelineName(val);
-                  const list = loadTimelines();
-                  saveTimelines(list.map(t => t.id === id ? { ...t, name: val } : t));
+                  await updateTimelineName(id, val);
                   setEditingName(false);
                 }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                  if (e.key === 'Escape') { setEditingName(false); }
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") setEditingName(false);
                 }}
                 className="bg-transparent border-b border-green-300 text-white font-bold text-lg outline-none w-64"
                 autoFocus
               />
             ) : (
-              <button
-                onClick={() => { if (!readOnly) setEditingName(true); }}
+              <button onClick={() => { if (!readOnly) setEditingName(true); }}
                 className={`group flex items-center gap-2 ${readOnly ? "cursor-default" : ""}`}>
                 <h1 className="text-lg font-bold tracking-tight">{timelineName}</h1>
                 {!readOnly && (
@@ -502,38 +562,101 @@ export default function TimelinePage() {
               }
             </div>
           </div>
+
+          {/* 편집 비밀번호 변경 */}
+          {!readOnly && (
+            <button
+              onClick={() => { setNewPw(""); setConfirmPw(""); setChangePwErr(""); setChangePwOpen(true); }}
+              className="flex items-center gap-1.5 text-green-200 hover:text-white text-xs font-medium transition-colors shrink-0 border border-green-600 hover:border-green-400 rounded-lg px-2.5 py-1.5">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0110 0v4" />
+              </svg>
+              비밀번호 변경
+            </button>
+          )}
+        </div>
+
+        {/* 탭 네비게이션 */}
+        <div className="flex border-t border-green-700 px-5">
+          {(["timeline", "suggestions"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-xs font-semibold transition-colors border-b-2 -mb-px
+                ${activeTab === tab
+                  ? "border-white text-white"
+                  : "border-transparent text-green-300 hover:text-white"}`}>
+              {tab === "timeline" ? "타임라인" : "개선제안"}
+            </button>
+          ))}
         </div>
       </header>
 
-      <main className="w-full px-4 py-4">
-        <div className={`grid gap-4 items-start ${readOnly ? "" : "grid-cols-1 lg:grid-cols-[300px_1fr]"}`}>
-          {/* 좌측 패널 — 편집 모드에서만 표시 */}
-          {!readOnly && (
-            <div className="space-y-3 lg:sticky lg:top-4">
-              <TimelineForm items={items} onAddLevel1={handleAddLevel1} onAddLevel2={handleAddLevel2} onAddLevel3={handleAddLevel3} />
-              <TaskList items={items} onDeleteLevel1={handleDeleteLevel1} onDeleteLevel2={handleDeleteLevel2} onDeleteLevel3={handleDeleteLevel3} />
+      {/* 편집 비밀번호 변경 모달 */}
+      {changePwOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={e => { if (e.target === e.currentTarget) setChangePwOpen(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-1">편집 비밀번호 변경</h3>
+            <p className="text-xs text-gray-500 mb-4">비워두면 전역 비밀번호(cell123!hs)로 초기화됩니다</p>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">새 비밀번호</label>
+            <input autoFocus type="password" placeholder="새 비밀번호 (비워두면 전역 사용)"
+              value={newPw} onChange={e => { setNewPw(e.target.value); setChangePwErr(""); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200 mb-3"
+            />
+            <label className="text-xs font-medium text-gray-500 mb-1 block">비밀번호 확인</label>
+            <input type="password" placeholder="동일한 비밀번호 재입력"
+              value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setChangePwErr(""); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200 mb-2"
+            />
+            {changePwErr && <p className="text-xs text-red-500 mb-2">{changePwErr}</p>}
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => setChangePwOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 font-medium">취소</button>
+              <button
+                onClick={async () => {
+                  if (newPw !== confirmPw) { setChangePwErr("비밀번호가 일치하지 않습니다"); return; }
+                  await updateTimelineEditPassword(id, newPw.trim() || undefined);
+                  setChangePwOpen(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-[#00733C] text-white text-sm font-bold hover:bg-[#005a2e] transition-colors">저장</button>
             </div>
-          )}
-
-          {/* 우측: 타임라인 차트 */}
-          <TimelineChart
-            items={items}
-            {...(!readOnly && {
-              onEditLevel2:        handleEditLevel2,
-              onEditLevel1Phases:  handleEditLevel1Phases,
-              onBulkShift:         handleBulkShift,
-              onReorderLevel1:     handleReorderLevel1,
-              onEditLevel1Color:   handleEditLevel1Color,
-              onEditLevel1:        handleEditLevel1,
-              onEditLevel3:        handleEditLevel3,
-              onBulkShiftL3:       handleBulkShiftL3,
-              onMergeL3:           handleMergeL3,
-              onUnmergeL3:         handleUnmergeL3,
-              onUpdateL3RowLabel:  handleUpdateL3RowLabel,
-            })}
-          />
+          </div>
         </div>
-      </main>
+      )}
+
+      {/* 탭 콘텐츠 */}
+      {activeTab === "suggestions" ? (
+        <SuggestionsBoard timelineId={id} editMode={!readOnly} />
+      ) : (
+        <main className="w-full px-4 py-4">
+          <div className={`grid gap-4 items-start ${readOnly ? "" : "grid-cols-1 lg:grid-cols-[300px_1fr]"}`}>
+            {!readOnly && (
+              <div className="space-y-3 lg:sticky lg:top-4">
+                <TimelineForm items={items} onAddLevel1={handleAddLevel1} onAddLevel2={handleAddLevel2} onAddLevel3={handleAddLevel3} />
+                <TaskList items={items} onDeleteLevel1={handleDeleteLevel1} onDeleteLevel2={handleDeleteLevel2} onDeleteLevel3={handleDeleteLevel3} />
+              </div>
+            )}
+            <TimelineChart
+              items={items}
+              {...(!readOnly && {
+                onEditLevel2:        handleEditLevel2,
+                onEditLevel1Phases:  handleEditLevel1Phases,
+                onBulkShift:         handleBulkShift,
+                onReorderLevel1:     handleReorderLevel1,
+                onEditLevel1Color:   handleEditLevel1Color,
+                onEditLevel1:        handleEditLevel1,
+                onEditLevel3:        handleEditLevel3,
+                onBulkShiftL3:       handleBulkShiftL3,
+                onMergeL3:           handleMergeL3,
+                onUnmergeL3:         handleUnmergeL3,
+                onUpdateL3RowLabel:  handleUpdateL3RowLabel,
+              })}
+            />
+          </div>
+        </main>
+      )}
     </div>
   );
 }

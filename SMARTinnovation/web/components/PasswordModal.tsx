@@ -9,6 +9,7 @@ interface Props {
   onSuccess: () => void;
   onCancel?: () => void;
   showCancel?: boolean;
+  checkFn?: (pw: string) => boolean; // 커스텀 비밀번호 검증 함수 (없으면 전역 비밀번호 사용)
 }
 
 export default function PasswordModal({
@@ -17,6 +18,7 @@ export default function PasswordModal({
   onSuccess,
   onCancel,
   showCancel = false,
+  checkFn,
 }: Props) {
   const [pw, setPw]         = useState("");
   const [error, setError]   = useState(false);
@@ -26,7 +28,8 @@ export default function PasswordModal({
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   function handleSubmit() {
-    if (checkPassword(pw)) {
+    const verify = checkFn ?? checkPassword;
+    if (verify(pw)) {
       setError(false);
       onSuccess();
     } else {

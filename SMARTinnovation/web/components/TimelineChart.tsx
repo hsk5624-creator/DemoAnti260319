@@ -1241,7 +1241,7 @@ export default function TimelineChart({
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth={2.5} className="shrink-0">
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="text-xs text-indigo-700 font-medium flex-1">
+          <span className="text-xs text-indigo-700 font-medium flex-1 whitespace-nowrap">
             Lv1·Lv2 주 단위 &nbsp;·&nbsp;
             Lv3 {anyExpanded ? "일 단위" : "주 단위"} 드래그
             {skipWeekends && anyExpanded && <span className="text-emerald-600"> (주말 건너뜀)</span>}
