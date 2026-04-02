@@ -1,394 +1,259 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Level1Item, Level2Item, Level3Item, PhaseSegment, CATEGORY_COLORS, generateId, parseWDate, wdateToIndex, shiftDateByWeeks } from "@/lib/types";
-import TimelineForm from "@/components/TimelineForm";
-import TimelineChart from "@/components/TimelineChart";
-import TaskList from "@/components/TaskList";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  loadTimelines, saveTimelines, generateTimelineId,
+  TimelineMeta,
+} from "@/lib/timelines";
+import { isLandingAuthed, setLandingAuthed, isEditAuthed, setEditAuthed } from "@/lib/auth";
+import PasswordModal from "@/components/PasswordModal";
 
-const C = CATEGORY_COLORS;
-const g = generateId;
+export default function LandingPage() {
+  const router = useRouter();
 
-const DEFAULT_DATA: Level1Item[] = [
-  // ── 별첨 로드맵 과제 ───────────────────────────────────────────
-  {
-    id: g(), name: "전자라벨", color: C[0], assignee: "", status: "in-progress",
-    children: [
-      { id: g(), parentId: "", name: "테스트 수행",               startDate: "2026-02-W1", endDate: "2026-02-W4", assignee: "", status: "in-progress", showOnLevel1: false },
-      { id: g(), parentId: "", name: "적용 여부 검토 및 발주",     startDate: "2026-02-W1", endDate: "2026-03-W2", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "LAN 포설 및 게이트웨이 설치", startDate: "2026-03-W1", endDate: "2026-04-W2", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "전자현황판 전사 설치",        startDate: "2026-04-W1", endDate: "2026-05-W2", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "5월말 Go-Live",              startDate: "2026-05-W3", endDate: "2026-05-W4", assignee: "", status: "critical",    showOnLevel1: true  },
-    ],
-  },
-  {
-    id: g(), name: "SOP AI", color: C[1], assignee: "", status: "planned",
-    children: [
-      { id: g(), parentId: "", name: "사내 AI 경진대회 수상 가정(5월)", startDate: "2026-05-W1", endDate: "2026-05-W4", assignee: "", status: "in-progress", showOnLevel1: true  },
-      { id: g(), parentId: "", name: "Kick-off",                        startDate: "2026-06-W1", endDate: "2026-06-W2", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "컨셉 및 모델 전략 수립",            startDate: "2026-06-W3", endDate: "2026-08-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "데이터 전처리",                     startDate: "2026-08-W1", endDate: "2026-09-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "프로토타입/테스트",                  startDate: "2026-09-W1", endDate: "2026-11-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "시스템 개발",                       startDate: "2026-10-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "사용자 평가 및 피드백 반영",          startDate: "2026-12-W1", endDate: "2027-04-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "'27.06 Go-Live",                   startDate: "2027-06-W1", endDate: "2027-06-W2", assignee: "", status: "critical",    showOnLevel1: true  },
-    ],
-  },
-  {
-    id: g(), name: "PPQR, 실패관리 AI", color: C[2], assignee: "", status: "planned",
-    children: [
-      { id: g(), parentId: "", name: "업체 소싱 및 사전 미팅(3월)", startDate: "2026-02-W1", endDate: "2026-03-W4", assignee: "", status: "in-progress", showOnLevel1: true  },
-      { id: g(), parentId: "", name: "업체 선정",                   startDate: "2026-04-W1", endDate: "2026-04-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "분류 체계 체계화",             startDate: "2026-05-W1", endDate: "2026-07-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "데이터 전처리",                startDate: "2026-06-W1", endDate: "2026-08-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "프로세스 설계",                startDate: "2026-08-W1", endDate: "2026-10-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "개발 및 AI 학습",              startDate: "2026-11-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "사용자 평가",                  startDate: "2027-01-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "'27.03 Go-Live",              startDate: "2027-03-W1", endDate: "2027-03-W2", assignee: "", status: "critical",    showOnLevel1: true  },
-    ],
-  },
-  {
-    id: g(), name: "AMS", color: C[3], assignee: "", status: "planned",
-    children: [
-      { id: g(), parentId: "", name: "계약 및 CSV 사전 준비", startDate: "2026-02-W1", endDate: "2026-04-W4", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "솔루션 I/F 설계",      startDate: "2026-05-W1", endDate: "2026-07-W4", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "테스트 검증",          startDate: "2026-08-W1", endDate: "2026-09-W2", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "CSV",                 startDate: "2026-09-W3", endDate: "2026-10-W2", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "26.10 Go-Live",       startDate: "2026-10-W1", endDate: "2026-10-W2", assignee: "", status: "critical", showOnLevel1: true  },
-    ],
-  },
-  {
-    id: g(), name: "LMS", color: C[4], assignee: "", status: "planned",
-    children: [
-      { id: g(), parentId: "", name: "Kick off 및 프로젝트 계획 수립",    startDate: "2026-01-W3", endDate: "2026-03-W2", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "LMS 구축 시작",                     startDate: "2026-03-W1", endDate: "2026-04-W4", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "시스템 테스트 수행",                 startDate: "2026-05-W1", endDate: "2026-08-W2", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "EDMS / MS AD 연동 Set up & 테스트", startDate: "2026-05-W1", endDate: "2026-08-W2", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "운영 환경 이관",                     startDate: "2026-08-W1", endDate: "2026-09-W1", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "26.9 Go-Live",                     startDate: "2026-09-W1", endDate: "2026-09-W2", assignee: "", status: "critical", showOnLevel1: true  },
-    ],
-  },
-  // ── 기존 MES / CMMS / NIR 과제 ────────────────────────────────
-  {
-    id: g(), name: "MES", color: C[5], assignee: "", status: "in-progress",
-    children: [
-      { id: g(), parentId: "", name: "MES TFT 창설",       startDate: "2026-02-W1", endDate: "2026-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "설비자산 업체 실사",   startDate: "2026-03-W1", endDate: "2026-04-W2", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "로드맵 상세화",        startDate: "2026-04-W1", endDate: "2026-05-W2", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "업체별 장단점 분석",   startDate: "2026-05-W3", endDate: "2026-07-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "URS 작성",            startDate: "2026-08-W1", endDate: "2026-10-W3", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "26.12 업체 선정",     startDate: "2026-11-W1", endDate: "2026-12-W4", assignee: "", status: "in-progress", showOnLevel1: true  },
-      { id: g(), parentId: "", name: "MES 구축 개시",        startDate: "2027-01-W1", endDate: "2027-01-W2", assignee: "", status: "critical",    showOnLevel1: true  },
-      { id: g(), parentId: "", name: "기능 디자인 설계",     startDate: "2027-01-W3", endDate: "2027-03-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "28.10 Go-Live",       startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical",    showOnLevel1: true  },
-    ],
-  },
-  {
-    id: g(), name: "CMMS", color: C[6], assignee: "", status: "planned",
-    children: [
-      { id: g(), parentId: "", name: "CMMS 적용 범위 설정",   startDate: "2026-03-W1", endDate: "2026-05-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "담당자 지정",           startDate: "2026-04-W1", endDate: "2026-05-W2", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "URS 의견 청취 및 작성", startDate: "2026-05-W3", endDate: "2026-07-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "26.10 업체 선정",       startDate: "2026-09-W1", endDate: "2026-10-W4", assignee: "", status: "in-progress", showOnLevel1: true  },
-      { id: g(), parentId: "", name: "26.12 업체 계약",       startDate: "2026-11-W1", endDate: "2026-12-W4", assignee: "", status: "critical",    showOnLevel1: true  },
-      { id: g(), parentId: "", name: "구축 계획 수립",        startDate: "2027-01-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "업무 프로세스 설계",    startDate: "2027-02-W1", endDate: "2027-05-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "27.12 Go-Live",        startDate: "2027-12-W1", endDate: "2027-12-W2", assignee: "", status: "critical",    showOnLevel1: true  },
-    ],
-  },
-  {
-    id: g(), name: "NIR", color: C[7], assignee: "", status: "planned",
-    children: [
-      { id: g(), parentId: "", name: "평가 항목 및 요구사항 검토", startDate: "2026-01-W1", endDate: "2026-03-W4", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "담당자 지정",              startDate: "2026-01-W3", endDate: "2026-02-W2", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "URS 작성",                 startDate: "2026-02-W3", endDate: "2026-04-W2", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "장비 구매",                startDate: "2026-04-W1", endDate: "2026-05-W4", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "평가 진행 및 가능성 검토", startDate: "2026-05-W1", endDate: "2026-09-W4", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "28년 생산 도입",           startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical", showOnLevel1: true  },
-    ],
-  },
-  {
-    id: g(), name: "진천 Window 구축", color: C[8], assignee: "", status: "in-progress",
-    children: [
-      { id: g(), parentId: "", name: "변경관리 준비",                        startDate: "2026-01-W1", endDate: "2026-02-W2", assignee: "", status: "in-progress", showOnLevel1: false },
-      { id: g(), parentId: "", name: "변경관리 개시 및 URS 작성",            startDate: "2026-02-W1", endDate: "2026-05-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "비교견적 및 업체선정",                  startDate: "2026-07-W1", endDate: "2026-08-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "관련 문서 개정, 장비 설치 및 적격성 평가", startDate: "2026-07-W1", endDate: "2026-09-W2", assignee: "", status: "planned",  showOnLevel1: false },
-      { id: g(), parentId: "", name: "신규 장비 운용 (과립/혼합 라인)",       startDate: "2026-09-W1", endDate: "2026-09-W2", assignee: "", status: "critical",    showOnLevel1: true  },
-      { id: g(), parentId: "", name: "변경관리 개시 및 URS 작성 (2차)",       startDate: "2027-01-W1", endDate: "2027-02-W4", assignee: "", status: "planned",     showOnLevel1: false },
-      { id: g(), parentId: "", name: "관련 문서 개정, 장비 설치 및 적격성 평가 (2차)", startDate: "2027-03-W1", endDate: "2027-04-W2", assignee: "", status: "planned", showOnLevel1: false },
-      { id: g(), parentId: "", name: "신규 장비 운용 (충전/선별 라인)",       startDate: "2027-04-W1", endDate: "2027-04-W2", assignee: "", status: "critical",    showOnLevel1: true  },
-    ],
-  },
-];
+  // 인증 상태 (SSR 안전하게 useEffect에서만 읽음)
+  const [authed,    setAuthed]    = useState(false);
+  const [authReady, setAuthReady] = useState(false);   // 마운트 후 체크 완료 여부
 
-const STORAGE_KEY = "smart-timeline-v3"; // 진천 Window 구축 추가
+  // 편집 진입 비밀번호 모달
+  const [editPwTarget, setEditPwTarget] = useState<TimelineMeta | null>(null);
 
-function loadItems(): Level1Item[] {
-  if (typeof window === "undefined") return DEFAULT_DATA;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as Level1Item[];
-  } catch {}
-  return DEFAULT_DATA;
-}
+  const [timelines,     setTimelines]     = useState<TimelineMeta[]>([]);
+  const [creating,      setCreating]      = useState(false);
+  const [newName,       setNewName]       = useState("");
+  const [deleteTarget,  setDeleteTarget]  = useState<TimelineMeta | null>(null);
 
-export default function Home() {
-  const [items, setItems] = useState<Level1Item[]>(loadItems);
-  const [undoSnapshot, setUndoSnapshot] = useState<Level1Item[] | null>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // 변경될 때마다 localStorage에 저장
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch {}
-  }, [items]);
-
-  // 삭제 전 스냅샷 저장 + 토스트 표시
-  const saveUndo = useCallback((prev: Level1Item[], msg: string) => {
-    setUndoSnapshot(prev);
-    setToastMsg(msg);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => {
-      setToastMsg(null);
-      setUndoSnapshot(null);
-    }, 6000);
+    const ok = isLandingAuthed();
+    setAuthed(ok);
+    setAuthReady(true);
+    if (ok) setTimelines(loadTimelines());
   }, []);
 
-  const handleUndo = useCallback(() => {
-    if (!undoSnapshot) return;
-    setItems(undoSnapshot);
-    setUndoSnapshot(null);
-    setToastMsg(null);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-  }, [undoSnapshot]);
+  function handleLandingAuth() {
+    setLandingAuthed();
+    setAuthed(true);
+    setTimelines(loadTimelines());
+  }
 
-  const handleAddLevel1 = useCallback((item: Level1Item) => {
-    setItems((prev) => [...prev, item]);
-  }, []);
+  function handleCreate() {
+    if (!newName.trim()) return;
+    const id = generateTimelineId();
+    const meta: TimelineMeta = { id, name: newName.trim(), createdAt: new Date().toISOString() };
+    const updated = [...timelines, meta];
+    saveTimelines(updated);
+    setTimelines(updated);
+    setNewName("");
+    setCreating(false);
+    router.push(`/timeline/${id}?edit=1`);
+  }
 
-  const handleAddLevel2 = useCallback((parentId: string, child: Level2Item) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === parentId
-          ? { ...item, children: [...item.children, { ...child, parentId }] }
-          : item
-      )
-    );
-  }, []);
+  function handleDelete(tl: TimelineMeta) {
+    const updated = timelines.filter(t => t.id !== tl.id);
+    saveTimelines(updated);
+    try { localStorage.removeItem(`smart-timeline-data-${tl.id}`); } catch {}
+    setTimelines(updated);
+    setDeleteTarget(null);
+  }
 
-  const handleDeleteLevel1 = useCallback((id: string) => {
-    setItems((prev) => {
-      const target = prev.find((i) => i.id === id);
-      saveUndo(prev, `그룹 "${target?.name ?? ""}" 삭제됨`);
-      return prev.filter((item) => item.id !== id);
-    });
-  }, [saveUndo]);
+  function handleEditAuth(tl: TimelineMeta) {
+    // 이미 이 세션에서 편집 인증됐으면 바로 이동
+    if (isEditAuthed()) {
+      router.push(`/timeline/${tl.id}?edit=1`);
+    } else {
+      setEditPwTarget(tl);
+    }
+  }
 
-  const handleDeleteLevel2 = useCallback((parentId: string, childId: string) => {
-    setItems((prev) => {
-      const parent = prev.find((i) => i.id === parentId);
-      const target = parent?.children.find((c) => c.id === childId);
-      saveUndo(prev, `과제 "${target?.name ?? ""}" 삭제됨`);
-      return prev.map((item) =>
-        item.id === parentId
-          ? { ...item, children: item.children.filter((c) => c.id !== childId) }
-          : item
-      );
-    });
-  }, [saveUndo]);
+  function handleEditPwSuccess() {
+    setEditAuthed();
+    const tl = editPwTarget!;
+    setEditPwTarget(null);
+    router.push(`/timeline/${tl.id}?edit=1`);
+  }
 
-  const handleEditLevel1Phases = useCallback((id: string, phases: PhaseSegment[]) => {
-    setItems(prev => prev.map(item => item.id === id ? { ...item, phases } : item));
-  }, []);
+  const fmt = (iso: string) => {
+    try { return new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }); }
+    catch { return ""; }
+  };
 
-  const handleBulkShift = useCallback(
-    (updates: Array<{ parentId: string; childId: string; startDate: string; endDate: string }>) => {
-      setItems((prev) => {
-        saveUndo(prev, `${updates.length}개 과제 일정 이동`);
-        return prev.map((item) => ({
-          ...item,
-          children: item.children.map((child) => {
-            const upd = updates.find((u) => u.childId === child.id);
-            if (!upd) return child;
-            // L2가 이동한 주 수를 계산해 Lv3도 함께 이동
-            const deltaWeeks = wdateToIndex(parseWDate(upd.startDate), parseWDate(child.startDate));
-            const newL3 = child.children?.map(l3 => ({
-              ...l3,
-              startDate: shiftDateByWeeks(l3.startDate, deltaWeeks),
-              endDate:   shiftDateByWeeks(l3.endDate,   deltaWeeks),
-            }));
-            return { ...child, startDate: upd.startDate, endDate: upd.endDate, children: newL3 };
-          }),
-        }));
-      });
-    },
-    [saveUndo],
-  );
+  // 마운트 전엔 아무것도 렌더링하지 않음 (sessionStorage hydration mismatch 방지)
+  if (!authReady) return null;
 
-  const handleAddLevel3 = useCallback((l2Id: string, child: Level3Item) => {
-    setItems(prev => prev.map(l1 => ({
-      ...l1,
-      children: l1.children.map(l2 =>
-        l2.id === l2Id
-          ? { ...l2, children: [...(l2.children ?? []), { ...child, parentId: l2Id }] }
-          : l2
-      ),
-    })));
-  }, []);
-
-  const handleDeleteLevel3 = useCallback((l2Id: string, childId: string) => {
-    setItems(prev => {
-      let name = "";
-      for (const l1 of prev)
-        for (const l2 of l1.children)
-          if (l2.id === l2Id) name = l2.children?.find(c => c.id === childId)?.name ?? "";
-      saveUndo(prev, `세부항목 "${name}" 삭제됨`);
-      return prev.map(l1 => ({
-        ...l1,
-        children: l1.children.map(l2 =>
-          l2.id === l2Id
-            ? { ...l2, children: (l2.children ?? []).filter(c => c.id !== childId) }
-            : l2
-        ),
-      }));
-    });
-  }, [saveUndo]);
-
-  const handleEditLevel1 = useCallback((updated: Level1Item) => {
-    setItems(prev => prev.map(item => item.id === updated.id ? updated : item));
-  }, []);
-
-  const handleEditLevel1Color = useCallback((id: string, color: string) => {
-    setItems(prev => prev.map(item => item.id === id ? { ...item, color } : item));
-  }, []);
-
-  const handleReorderLevel1 = useCallback((draggingId: string, dropBeforeId: string | null) => {
-    setItems(prev => {
-      const fromIdx = prev.findIndex(i => i.id === draggingId);
-      if (fromIdx < 0) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(fromIdx, 1);
-      if (dropBeforeId === null) {
-        next.push(moved);
-      } else {
-        const toIdx = next.findIndex(i => i.id === dropBeforeId);
-        next.splice(toIdx < 0 ? next.length : toIdx, 0, moved);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleEditLevel2 = useCallback((parentId: string, updated: Level2Item) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.id === parentId) {
-          const exists = item.children.some((c) => c.id === updated.id);
-          return {
-            ...item,
-            children: exists
-              ? item.children.map((c) => (c.id === updated.id ? updated : c))
-              : [...item.children, updated],
-          };
-        }
-        // 그룹 이동 시 원래 그룹에서 제거
-        if (item.children.some((c) => c.id === updated.id)) {
-          return { ...item, children: item.children.filter((c) => c.id !== updated.id) };
-        }
-        return item;
-      })
-    );
-  }, []);
-
-  const handleBulkShiftL3 = useCallback((updates: { l2Id: string; l3Id: string; startDate: string; endDate: string }[]) => {
-    setItems((prev) =>
-      prev.map((item) => ({
-        ...item,
-        children: item.children.map((l2) => {
-          const l2Updates = updates.filter((u) => u.l2Id === l2.id);
-          if (l2Updates.length === 0) return l2;
-          return {
-            ...l2,
-            children: (l2.children ?? []).map((l3) => {
-              const upd = l2Updates.find((u) => u.l3Id === l3.id);
-              if (!upd) return l3;
-              return { ...l3, startDate: upd.startDate, endDate: upd.endDate };
-            }),
-          };
-        }),
-      }))
-    );
-  }, []);
-
-  const handleEditLevel3 = useCallback((l2Id: string, updated: Level3Item) => {
-    setItems((prev) =>
-      prev.map((item) => ({
-        ...item,
-        children: item.children.map((l2) => {
-          if (l2.id !== l2Id) return l2;
-          return {
-            ...l2,
-            children: (l2.children ?? []).map((l3) => l3.id === updated.id ? updated : l3),
-          };
-        }),
-      }))
-    );
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-gray-50/70">
-      {/* 되돌리기 토스트 */}
-      {toastMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3
-          bg-gray-900 text-white text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-700
-          animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <span className="text-gray-200">{toastMsg}</span>
-          <button
-            onClick={handleUndo}
-            className="text-green-400 font-bold hover:text-green-300 transition-colors whitespace-nowrap border-l border-gray-700 pl-3">
-            되돌리기
-          </button>
-          <button
-            onClick={() => { setToastMsg(null); setUndoSnapshot(null); }}
-            className="text-gray-500 hover:text-gray-300 transition-colors text-base leading-none">
-            ×
-          </button>
+  // ── 비밀번호 게이트 ──────────────────────────────────────────────
+  if (!authed) {
+    return (
+      <div className="min-h-screen bg-[#00733C] flex flex-col items-center justify-center">
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl font-bold text-white tracking-tight">SMART Innovation</h1>
+          <p className="text-green-200 text-sm mt-1">로드맵 타임라인 대시보드</p>
         </div>
-      )}
+        <PasswordModal
+          title="접속 비밀번호 입력"
+          description="이 대시보드는 인증된 사용자만 접근할 수 있습니다"
+          onSuccess={handleLandingAuth}
+        />
+      </div>
+    );
+  }
+
+  // ── 랜딩 페이지 본문 ─────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-gray-50">
       {/* 헤더 */}
       <header className="bg-[#00733C] text-white shadow-lg">
-        <div className="w-full px-5 py-3 flex items-center justify-between">
+        <div className="w-full px-6 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold tracking-tight">SMART Innovation</h1>
-            <p className="text-green-200 text-xs mt-0.5">로드맵 과제별 타임라인 자동 생성</p>
+            <h1 className="text-xl font-bold tracking-tight">SMART Innovation</h1>
+            <p className="text-green-200 text-xs mt-0.5">로드맵 타임라인 대시보드</p>
           </div>
         </div>
       </header>
 
-      <main className="w-full px-4 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
-          {/* 좌측 패널 */}
-          <div className="space-y-3 lg:sticky lg:top-4">
-            <TimelineForm items={items} onAddLevel1={handleAddLevel1} onAddLevel2={handleAddLevel2} onAddLevel3={handleAddLevel3} />
-            <TaskList items={items} onDeleteLevel1={handleDeleteLevel1} onDeleteLevel2={handleDeleteLevel2} onDeleteLevel3={handleDeleteLevel3} />
+      <main className="max-w-5xl mx-auto px-6 py-10">
+        {/* 섹션 헤더 */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">타임라인 목록</h2>
+            <p className="text-sm text-gray-500 mt-0.5">카드 클릭 → 조회 &nbsp;·&nbsp; 🔑 버튼 클릭 → 편집 모드</p>
           </div>
+          <button
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#00733C] text-white text-sm font-semibold hover:bg-[#005a2e] transition-colors shadow-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            새 타임라인
+          </button>
+        </div>
 
-          {/* 우측: 타임라인 차트 */}
-          <TimelineChart
-            items={items}
-            onEditLevel2={handleEditLevel2}
-            onEditLevel1Phases={handleEditLevel1Phases}
-            onBulkShift={handleBulkShift}
-            onReorderLevel1={handleReorderLevel1}
-            onEditLevel1Color={handleEditLevel1Color}
-            onEditLevel1={handleEditLevel1}
-            onEditLevel3={handleEditLevel3}
-            onBulkShiftL3={handleBulkShiftL3}
-          />
+        {/* 타임라인 카드 그리드 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {timelines.map(tl => (
+            <div key={tl.id} className="group relative bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-green-300 transition-all">
+
+              {/* 삭제 버튼 (우상단) */}
+              <button
+                onClick={e => { e.stopPropagation(); setDeleteTarget(tl); }}
+                className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-lg text-gray-200 hover:text-red-400 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100 z-10">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+
+              {/* 카드 본문 — 클릭 시 조회 모드 */}
+              <div
+                className="p-5 cursor-pointer"
+                onClick={() => router.push(`/timeline/${tl.id}`)}>
+                <div className="w-10 h-10 rounded-xl bg-[#00733C]/10 flex items-center justify-center mb-3">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00733C" strokeWidth={2}>
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18M8 14h2m4 0h2M8 18h2m4 0h2" />
+                  </svg>
+                </div>
+                <h3 className="text-sm font-bold text-gray-900 mb-1 truncate pr-6">{tl.name}</h3>
+                <p className="text-xs text-gray-400 mb-4">{fmt(tl.createdAt)}</p>
+
+                {/* 모드 안내 배지 */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5 flex items-center gap-1">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    조회
+                  </span>
+                </div>
+              </div>
+
+              {/* 편집 모드 진입 버튼 — 카드 하단 */}
+              <div className="border-t border-gray-100 px-5 py-2.5">
+                <button
+                  onClick={e => { e.stopPropagation(); handleEditAuth(tl); }}
+                  className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg py-1.5 transition-colors">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                  </svg>
+                  편집 모드로 진입
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {timelines.length === 0 && (
+            <div
+              onClick={() => setCreating(true)}
+              className="border-2 border-dashed border-gray-200 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-green-300 hover:bg-green-50/30 transition-all min-h-[140px]">
+              <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <p className="text-sm text-gray-400 font-medium">첫 타임라인 만들기</p>
+            </div>
+          )}
         </div>
       </main>
+
+      {/* 새 타임라인 생성 모달 */}
+      {creating && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={e => { if (e.target === e.currentTarget) setCreating(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-4">새 타임라인 만들기</h3>
+            <input
+              autoFocus
+              type="text"
+              placeholder="타임라인 이름 (예: 2026 제조혁신)"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(false); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200 mb-4"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setCreating(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 font-medium">취소</button>
+              <button
+                onClick={handleCreate}
+                disabled={!newName.trim()}
+                className="flex-1 py-2.5 rounded-xl bg-[#00733C] text-white text-sm font-bold hover:bg-[#005a2e] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">만들기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-2">타임라인 삭제</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              <span className="font-semibold text-gray-800">"{deleteTarget.name}"</span>을 삭제하면 모든 데이터가 사라집니다. 계속할까요?
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteTarget(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 font-medium">취소</button>
+              <button
+                onClick={() => handleDelete(deleteTarget)}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors">삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 편집 모드 비밀번호 모달 */}
+      {editPwTarget && (
+        <PasswordModal
+          title="편집 모드 진입"
+          description={`"${editPwTarget.name}" 편집 권한을 확인합니다`}
+          showCancel
+          onSuccess={handleEditPwSuccess}
+          onCancel={() => setEditPwTarget(null)}
+        />
+      )}
     </div>
   );
 }

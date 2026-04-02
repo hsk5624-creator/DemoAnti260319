@@ -51,6 +51,7 @@ export interface Level3Item {
   endDate: string;    // "YYYY-MM-DD"
   assignee: string;
   status: TaskStatus;
+  rowId?: string;     // 같은 rowId끼리 한 줄에 렌더링
 }
 
 export interface Level2Item {
@@ -63,6 +64,7 @@ export interface Level2Item {
   status: TaskStatus;
   showOnLevel1?: boolean;
   children?: Level3Item[];
+  l3RowMeta?: Record<string, { label: string }>;  // rowId → 행 레이블
 }
 
 export interface PhaseSegment {

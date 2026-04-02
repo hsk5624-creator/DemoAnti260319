@@ -10,6 +10,13 @@ import {
 interface BulkShiftUpdate { parentId: string; childId: string; startDate: string; endDate: string; }
 interface BulkShiftL3Update { l2Id: string; l3Id: string; startDate: string; endDate: string; }
 
+interface L3Row {
+  rowId: string;      // merged → shared rowId, solo → l3.id
+  isMerged: boolean;
+  items: Level3Item[];
+  label?: string;
+}
+
 interface Props {
   items: Level1Item[];
   title?: string;
@@ -21,9 +28,13 @@ interface Props {
   onEditLevel1?: (updated: Level1Item) => void;
   onEditLevel3?: (l2Id: string, updated: Level3Item) => void;
   onBulkShiftL3?: (updates: BulkShiftL3Update[]) => void;
+  onMergeL3?: (l2Id: string, srcRowId: string, targetRowId: string) => void;
+  onUnmergeL3?: (l2Id: string, l3Id: string) => void;
+  onUpdateL3RowLabel?: (l2Id: string, rowId: string, label: string) => void;
 }
 
 const WEEK_W    = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
+const DAY_W     = 35;   // px per day   (expanded month)
 const L1_BASE_H = 48;   // L1 기본 행 높이
 const L2_H      = 36;
 const BAR1_H    = 14;   // L1 pill height
@@ -76,6 +87,9 @@ export default function TimelineChart({
   onEditLevel1,
   onEditLevel3,
   onBulkShiftL3,
+  onMergeL3,
+  onUnmergeL3,
+  onUpdateL3RowLabel,
 }: Props) {
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [expandedL2,    setExpandedL2]    = useState<Set<string>>(new Set());
@@ -90,13 +104,35 @@ export default function TimelineChart({
   const [dragOffset, setDragOffset] = useState<
     | { type: 'l1'; itemId: string; weekOffset: number }
     | { type: 'l2'; childId: string; weekOffset: number }
-    | { type: 'l3'; l3Id: string; weekOffset: number }
+    | { type: 'l3'; l3Id: string; weekOffset: number; dayMode?: boolean }
     | null
   >(null);
 
   // 색상 피커
   const [colorPickerId,  setColorPickerId]  = useState<string | null>(null);
   const [colorPickerPos, setColorPickerPos] = useState<{ x: number; y: number } | null>(null);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [skipWeekends,   setSkipWeekends]   = useState(false);
+  const skipWeekendsRef    = useRef(skipWeekends);
+  const expandedMonthsRef  = useRef(expandedMonths);
+  skipWeekendsRef.current    = skipWeekends;
+  expandedMonthsRef.current  = expandedMonths;
+
+  // 병합 드래그 상태
+  const [mergeDrag, setMergeDrag] = useState<{
+    srcL2Id: string;
+    srcRowId: string;
+    targetRowId: string | null;
+    valid: boolean;
+  } | null>(null);
+
+  // 행 레이블 인라인 편집 상태
+  const [editingRowLabel, setEditingRowLabel] = useState<{
+    l2Id: string; rowId: string; value: string;
+  } | null>(null);
+
+  const onMergeL3Ref = useRef(onMergeL3);
+  onMergeL3Ref.current = onMergeL3;
 
   // L1 행 순서 변경 드래그 상태
   const [reorderDraggingId,  setReorderDraggingId]  = useState<string | null>(null);
@@ -145,7 +181,7 @@ export default function TimelineChart({
     });
   }, []);
 
-  // L3 바 드래그 핸들러
+  // L3 바 드래그 핸들러 — 확장 시 일 단위, 비확장 시 주 단위
   const handleL3BarMouseDown = useCallback((
     e: React.MouseEvent,
     l3Id: string,
@@ -156,12 +192,14 @@ export default function TimelineChart({
 
     const startX = e.clientX;
     let lastOffset = 0;
+    const isDayMode = expandedMonthsRef.current.size > 0;
+    const unitPx = isDayMode ? DAY_W : WEEK_W;
 
     const onMove = (ev: MouseEvent) => {
-      const newOffset = Math.round((ev.clientX - startX) / WEEK_W);
+      const newOffset = Math.round((ev.clientX - startX) / unitPx);
       if (newOffset !== lastOffset) {
         lastOffset = newOffset;
-        setDragOffset({ type: 'l3', l3Id, weekOffset: newOffset });
+        setDragOffset({ type: 'l3', l3Id, weekOffset: newOffset, dayMode: isDayMode });
       }
     };
 
@@ -176,6 +214,17 @@ export default function TimelineChart({
       const idsToShift  = curSelected.size > 0 && curSelected.has(l3Id)
         ? curSelected : new Set([l3Id]);
 
+      const skip = skipWeekendsRef.current;
+      // 일 단위 모드: 캘린더일 또는 영업일로 이동
+      // 주 단위 모드: 기존 주 단위 이동
+      const shiftFn = isDayMode
+        ? (dateStr: string) => skip
+            ? shiftDateByWorkdays(dateStr, lastOffset)
+            : shiftDateByCalendarDays(dateStr, lastOffset)
+        : (dateStr: string) => skip
+            ? shiftDateByWorkdays(dateStr, lastOffset * 5)
+            : shiftDateByWeeks(dateStr, lastOffset);
+
       const updates: BulkShiftL3Update[] = [];
       for (const item of curItems)
         for (const l2 of item.children)
@@ -183,8 +232,8 @@ export default function TimelineChart({
             if (idsToShift.has(l3.id))
               updates.push({
                 l2Id: l2.id, l3Id: l3.id,
-                startDate: shiftDateByWeeks(l3.startDate, lastOffset),
-                endDate:   shiftDateByWeeks(l3.endDate,   lastOffset),
+                startDate: shiftFn(l3.startDate),
+                endDate:   shiftFn(l3.endDate),
               });
 
       if (updates.length > 0) onBulkShiftL3(updates);
@@ -193,6 +242,61 @@ export default function TimelineChart({
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   }, [editMode, onBulkShiftL3]);
+
+  // 병합 드래그 핸들러 — 편집모드에서 ⣿ 핸들을 잡아 다른 L3 행으로 드래그
+  const handleMergeHandleMouseDown = useCallback((
+    e: React.MouseEvent,
+    l2Id: string,
+    srcRowId: string,
+  ) => {
+    if (!editMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    setMergeDrag({ srcL2Id: l2Id, srcRowId, targetRowId: null, valid: false });
+
+    const onMove = (ev: MouseEvent) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const rowEl = el?.closest('[data-l3rowid]') as HTMLElement | null;
+      const targetRowId  = rowEl?.dataset.l3rowid ?? null;
+      const targetL2Id   = rowEl?.dataset.l2id   ?? null;
+
+      if (!targetRowId || targetRowId === srcRowId || targetL2Id !== l2Id) {
+        setMergeDrag(prev => prev ? { ...prev, targetRowId: null, valid: false } : null);
+        return;
+      }
+
+      // 날짜 겹침 검사: 소스 행의 모든 항목 vs 타깃 행의 모든 항목
+      const curItems = itemsRef.current;
+      const srcItems: Level3Item[] = [], tgtItems: Level3Item[] = [];
+      for (const l1 of curItems)
+        for (const l2 of l1.children) {
+          if (l2.id !== l2Id) continue;
+          for (const l3 of (l2.children ?? [])) {
+            if (l3.id === srcRowId || l3.rowId === srcRowId) srcItems.push(l3);
+            if (l3.id === targetRowId || l3.rowId === targetRowId) tgtItems.push(l3);
+          }
+        }
+
+      const hasOverlap = srcItems.some(s => tgtItems.some(t => datesOverlap(s, t)));
+      const valid = srcItems.length > 0 && tgtItems.length > 0 && !hasOverlap;
+      setMergeDrag(prev => prev ? { ...prev, targetRowId, valid } : null);
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setMergeDrag(prev => {
+        if (prev?.targetRowId && prev.valid) {
+          onMergeL3Ref.current?.(prev.srcL2Id, prev.srcRowId, prev.targetRowId);
+        }
+        return null;
+      });
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [editMode]);
 
   // L2 바 드래그 핸들러
   const handleBarMouseDown = useCallback((
@@ -355,9 +459,81 @@ export default function TimelineChart({
     return { weeks: ws, base, totalWeeks: total, ...buildGroups(ws) };
   }, [items]);
 
-  const today  = todayWDate();
-  const todayX = wdateToIndex(today, base) * WEEK_W;
-  const showToday = todayX >= 0 && todayX <= totalWeeks * WEEK_W;
+  /* ── 월별 레이아웃 (확장 여부 반영) ── */
+  const { monthLayout, totalWidth, yearLayout } = useMemo(() => {
+    const ml: Array<{
+      year: number; month: number; count: number; startIdx: number; week1: boolean;
+      x: number; width: number; expanded: boolean;
+    }> = [];
+    let x = 0;
+    for (const mg of monthGroups) {
+      const key = `${mg.year}-${String(mg.month).padStart(2, "0")}`;
+      const isExp = expandedMonths.has(key);
+      const days = new Date(mg.year, mg.month, 0).getDate();
+      const width = isExp ? days * DAY_W : mg.count * WEEK_W;
+      ml.push({ ...mg, x, width, expanded: isExp });
+      x += width;
+    }
+    const yl: Array<{ year: number; x: number; width: number }> = [];
+    for (const m of ml) {
+      if (yl.length === 0 || yl[yl.length - 1].year !== m.year) {
+        yl.push({ year: m.year, x: m.x, width: m.width });
+      } else {
+        yl[yl.length - 1].width += m.width;
+      }
+    }
+    return { monthLayout: ml, totalWidth: x, yearLayout: yl };
+  }, [monthGroups, expandedMonths]);
+
+  const toggleMonth = (year: number, month: number) => {
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+    setExpandedMonths(prev => {
+      const n = new Set(prev);
+      n.has(key) ? n.delete(key) : n.add(key);
+      return n;
+    });
+  };
+
+  // 날짜 → x 픽셀 (주 단위 WDate)
+  function xForWDate(wd: WDate): number {
+    const m = monthLayout.find(ml => ml.year === wd.year && ml.month === wd.month);
+    if (!m) return 0;
+    if (m.expanded) return m.x + (wd.week - 1) * 7 * DAY_W;
+    return m.x + (wd.week - 1) * WEEK_W;
+  }
+  // 날짜 → x 픽셀 (YYYY-MM-DD 문자열)
+  function xForDateStr(dateStr: string): number {
+    if (!dateStr) return 0;
+    const parts = dateStr.split("-");
+    if (parts.length < 3) return 0;
+    const y = Number(parts[0]), mo = Number(parts[1]), d = Number(parts[2]);
+    if (!y || !mo || !d) return 0;
+    const m = monthLayout.find(ml => ml.year === y && ml.month === mo);
+    if (!m) return 0;
+    if (m.expanded) return m.x + (d - 1) * DAY_W;
+    const week = Math.min(4, Math.ceil(d / 7));
+    const dayInWeek = (d - 1) % 7;
+    return m.x + (week - 1) * WEEK_W + (dayInWeek / 7) * WEEK_W;
+  }
+  // 한 슬롯(주) 폭
+  function slotW(wd: WDate): number {
+    const m = monthLayout.find(ml => ml.year === wd.year && ml.month === wd.month);
+    return m?.expanded ? 7 * DAY_W : WEEK_W;
+  }
+  // 하루 픽셀 폭
+  function daySlotW(dateStr: string): number {
+    const parts = dateStr.split("-");
+    const y = Number(parts[0]), mo = Number(parts[1]);
+    const m = monthLayout.find(ml => ml.year === y && ml.month === mo);
+    return m?.expanded ? DAY_W : WEEK_W / 7;
+  }
+
+  const todayRaw = new Date();
+  const todayX = xForDateStr(
+    `${todayRaw.getFullYear()}-${String(todayRaw.getMonth() + 1).padStart(2, "0")}-${String(todayRaw.getDate()).padStart(2, "0")}`
+  );
+  const showToday = todayX >= 0 && todayX <= totalWidth;
+  const anyExpanded = expandedMonths.size > 0;
 
   if (items.length === 0 || items.every(i => i.children.length === 0)) {
     return (
@@ -406,7 +582,7 @@ export default function TimelineChart({
         </div>
 
         <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
-          <div style={{ minWidth: labelW + totalWeeks * WEEK_W }}>
+          <div style={{ minWidth: labelW + totalWidth }}>
 
             {/* ━━━ 헤더 ━━━ */}
             <div className="flex sticky top-0 z-30 shadow-sm">
@@ -424,27 +600,58 @@ export default function TimelineChart({
               <div className="flex-1 bg-gray-800">
                 {/* 연도 행 */}
                 <div className="flex border-b border-gray-700">
-                  {yearGroups.map(yg => (
+                  {yearLayout.map(yg => (
                     <div key={yg.year}
-                      style={{ width: yg.count * WEEK_W }}
+                      style={{ width: yg.width }}
                       className="text-center text-[15px] font-bold text-white py-1.5 border-r border-gray-600 last:border-r-0 tracking-wider">
                       {yg.year}
                     </div>
                   ))}
                 </div>
-                {/* 월 행 — 숫자만 */}
-                <div className="flex">
-                  {monthGroups.map((mg, i) => (
+                {/* 월 행 — 클릭으로 일별 펼치기 */}
+                <div className={`flex${anyExpanded ? " border-b border-gray-700" : ""}`}>
+                  {monthLayout.map((mg, i) => (
                     <div key={i}
-                      style={{ width: mg.count * WEEK_W }}
-                      className={`text-center py-1.5 border-r border-gray-700 last:border-r-0 select-none
+                      style={{ width: mg.width }}
+                      onClick={() => toggleMonth(mg.year, mg.month)}
+                      title={mg.expanded ? "클릭하여 주 단위로 축소" : "클릭하여 일 단위로 펼치기"}
+                      className={`text-center py-1.5 border-r border-gray-700 last:border-r-0 select-none cursor-pointer
+                        transition-colors hover:bg-gray-700
                         ${mg.month === 1
                           ? "text-[13px] font-extrabold text-green-300"
-                          : "text-[12px] font-semibold text-gray-300"}`}>
-                      {mg.month}
+                          : "text-[12px] font-semibold text-gray-300"}
+                        ${mg.expanded ? "bg-gray-700 text-white" : ""}`}>
+                      {mg.month}{mg.expanded ? "▾" : ""}
                     </div>
                   ))}
                 </div>
+                {/* 일 행 — 확장된 월만 표시 */}
+                {anyExpanded && (
+                  <div className="flex">
+                    {monthLayout.map((mg, i) => {
+                      if (!mg.expanded) {
+                        return <div key={i} style={{ width: mg.width }} className="border-r border-gray-700 last:border-r-0" />;
+                      }
+                      const days = new Date(mg.year, mg.month, 0).getDate();
+                      return (
+                        <div key={i} style={{ width: mg.width }} className="flex border-r border-gray-600 last:border-r-0">
+                          {Array.from({ length: days }, (_, d) => {
+                            const dow = new Date(mg.year, mg.month - 1, d + 1).getDay();
+                            const isSun = dow === 0, isSat = dow === 6;
+                            return (
+                              <div key={d}
+                                style={{ width: DAY_W, minWidth: DAY_W }}
+                                className={`text-center text-[9px] py-0.5 border-r border-gray-700 last:border-r-0 shrink-0 overflow-hidden font-medium
+                                  ${isSun ? "text-red-400 bg-red-900/20" : isSat ? "text-indigo-400 bg-indigo-900/20" : "text-gray-400"}`}>
+                                {d + 1}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -455,14 +662,14 @@ export default function TimelineChart({
               const range      = getLevel1Range(item);
               const isExpanded = expanded.has(item.id);
               const l2TotalH   = item.children.reduce((sum, l2) => {
-                const l3Count = l2.children?.length ?? 0;
-                return sum + L2_H + (expandedL2.has(l2.id) && l3Count > 0 ? l3Count * L3_H : 0);
+                const l3Rows = buildL3Rows(l2.children ?? [], l2.l3RowMeta);
+                return sum + L2_H + (expandedL2.has(l2.id) && l3Rows.length > 0 ? l3Rows.length * L3_H : 0);
               }, 0);
 
               /* ── 이 L1의 마일스톤 플래그 스태킹 ── */
               const msRaw = item.children
                 .filter(c => c.showOnLevel1)
-                .map(c => ({ child: c, x: wdateToIndex(parseWDate(c.startDate), base) * WEEK_W }))
+                .map(c => ({ child: c, x: xForWDate(parseWDate(c.startDate)) }))
                 .sort((a, b) => a.x - b.x);
               const rowEdge: number[] = [];
               const msStacked = msRaw.map(m => {
@@ -574,7 +781,7 @@ export default function TimelineChart({
                     {/* 차트 열 */}
                     <div className="flex-1 relative overflow-hidden isolate">
                       {/* 그리드 */}
-                      <MonthGrid monthGroups={monthGroups} weekW={WEEK_W} />
+                      <MonthGrid monthLayout={monthLayout} />
 
                       {/* 오늘 라인 */}
                       {showToday && (
@@ -655,9 +862,11 @@ export default function TimelineChart({
                         const l1Preview = dragOffset?.type === 'l1' && dragOffset.itemId === item.id
                           ? dragOffset.weekOffset * WEEK_W : 0;
 
-                        const sx   = wdateToIndex(parseWDate(range.start), base) * WEEK_W;
-                        const ex   = wdateToIndex(parseWDate(range.end),   base) * WEEK_W + WEEK_W;
-                        const barW = Math.max(ex - sx, WEEK_W * 2);
+                        const startWd = parseWDate(range.start);
+                        const endWd   = parseWDate(range.end);
+                        const sx   = xForWDate(startWd);
+                        const ex   = xForWDate(endWd) + slotW(endWd);
+                        const barW = Math.max(ex - sx, slotW(startWd) * 2);
                         const phases = item.phases?.filter(p => p.startDate && p.endDate) ?? [];
                         const N = phases.length;
 
@@ -706,8 +915,9 @@ export default function TimelineChart({
                             {phases.map((phase, i) => {
                               const alpha = N === 1 ? 0.85 : 0.32 + (i / (N - 1)) * 0.58;
                               const alphHex = Math.round(alpha * 255).toString(16).padStart(2, "0");
-                              const psx = Math.max(0, wdateToIndex(parseWDate(phase.startDate), base) * WEEK_W - sx);
-                              const pex = Math.min(barW, wdateToIndex(parseWDate(phase.endDate), base) * WEEK_W + WEEK_W - sx);
+                              const phEndWd = parseWDate(phase.endDate);
+                              const psx = Math.max(0, xForWDate(parseWDate(phase.startDate)) - sx);
+                              const pex = Math.min(barW, xForWDate(phEndWd) + slotW(phEndWd) - sx);
                               const pw  = Math.max(0, pex - psx);
                               if (pw === 0) return null;
                               return (
@@ -735,9 +945,9 @@ export default function TimelineChart({
                     {item.children.map((child, cIdx) => {
                       const sWd    = parseWDate(child.startDate);
                       const eWd    = parseWDate(child.endDate);
-                      const sx     = wdateToIndex(sWd, base) * WEEK_W;
-                      const ex     = wdateToIndex(eWd, base) * WEEK_W + WEEK_W;
-                      const barW   = Math.max(ex - sx, WEEK_W);
+                      const sx     = xForWDate(sWd);
+                      const ex     = xForWDate(eWd) + slotW(eWd);
+                      const barW   = Math.max(ex - sx, slotW(sWd));
                       const color  = STATUS_COLORS[child.status];
                       const barTop = (L2_H - BAR2_H) / 2;
                       const labelAboveY = barTop - 14;
@@ -803,7 +1013,7 @@ export default function TimelineChart({
 
                           {/* 차트 */}
                           <div className="flex-1 relative overflow-hidden isolate">
-                            <MonthGrid monthGroups={monthGroups} weekW={WEEK_W} />
+                            <MonthGrid monthLayout={monthLayout} />
                             {showToday && (
                               <div className="absolute top-0 bottom-0 w-px bg-red-400/30 pointer-events-none"
                                 style={{ left: todayX }} />
@@ -848,75 +1058,156 @@ export default function TimelineChart({
                         </div>
 
                         {/* ── Level 3 슬라이드 ── */}
-                        {(child.children?.length ?? 0) > 0 && (
-                          <div style={{
-                            maxHeight: expandedL2.has(child.id)
-                              ? `${child.children!.length * L3_H}px` : "0px",
-                            overflow: "clip",
-                            transition: "max-height 0.25s cubic-bezier(0.4,0,0.2,1)",
-                          }}>
-                            {child.children!.map((l3, l3Idx) => {
-                              const sx3 = dateStrToFractionalWeek(l3.startDate, base) * WEEK_W;
-                              const ex3 = dateStrToFractionalWeek(l3.endDate,   base) * WEEK_W + WEEK_W / 7;
-                              const bw3 = Math.max(ex3 - sx3, WEEK_W / 7 * 3);
-                              const c3  = STATUS_COLORS[l3.status];
-
-                              const isDragThisL3  = dragOffset?.type === 'l3' && dragOffset.l3Id === l3.id;
-                              const isDragGroupL3 = dragOffset?.type === 'l3' && selectedL3Ids.has(dragOffset.l3Id) && selectedL3Ids.has(l3.id);
-                              const previewPx3 = (isDragThisL3 || isDragGroupL3) ? (dragOffset?.weekOffset ?? 0) * WEEK_W : 0;
-
-                              return (
-                                <div key={l3.id}
-                                  className={`flex border-t border-gray-100 ${editMode ? "" : "cursor-pointer hover:bg-blue-50/40"} ${l3Idx % 2 === 0 ? "bg-slate-50/30" : "bg-white"}`}
-                                  style={{ height: L3_H }}
-                                  onClick={() => { if (!editMode) setL3EditTarget({ l2Id: child.id, child: l3 }); }}>
-                                  {/* L3 라벨 */}
-                                  <div style={{ width: labelW, minWidth: labelW }}
-                                    className="sticky left-0 z-10 bg-white border-r border-gray-100 flex items-center px-3 gap-1.5 shrink-0 pl-8">
-                                    {editMode ? (
-                                      <input type="checkbox"
-                                        checked={selectedL3Ids.has(l3.id)}
-                                        onChange={e => { e.stopPropagation(); toggleL3(l3.id); }}
-                                        onClick={e => e.stopPropagation()}
-                                        className="w-3 h-3 accent-indigo-600 shrink-0 cursor-pointer"
-                                      />
-                                    ) : (
-                                      <div className="w-px h-3 bg-gray-200 shrink-0" />
-                                    )}
-                                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c3 }} />
-                                    <span className="text-[10px] text-gray-500 truncate flex-1">{l3.name}</span>
-                                  </div>
-                                  {/* L3 차트 */}
-                                  <div className="flex-1 relative overflow-hidden isolate">
-                                    <MonthGrid monthGroups={monthGroups} weekW={WEEK_W} />
-                                    {showToday && (
-                                      <div className="absolute top-0 bottom-0 w-px bg-red-400/20 pointer-events-none"
-                                        style={{ left: todayX }} />
-                                    )}
-                                    <div
-                                      className={`absolute z-10 rounded-full shadow-sm${editMode ? " cursor-ew-resize hover:shadow-md hover:ring-1 hover:ring-indigo-300" : ""}`}
-                                      style={{
-                                        left: sx3 + previewPx3, top: (L3_H - BAR3_H) / 2,
-                                        width: bw3, height: BAR3_H,
-                                        backgroundColor: c3,
-                                        opacity: previewPx3 !== 0 ? 1 : 0.75,
-                                        outline: previewPx3 !== 0 ? `2px solid ${c3}` : undefined,
-                                      }}
-                                      onMouseDown={e => handleL3BarMouseDown(e, l3.id)}
-                                    />
-                                    <div className="absolute text-[9px] font-medium whitespace-nowrap z-20 pointer-events-none"
-                                      style={{
-                                        left: sx3 + previewPx3 + bw3 / 2, top: (L3_H - BAR3_H) / 2 - 11,
-                                        transform: "translateX(-50%)", color: c3,
+                        {(child.children?.length ?? 0) > 0 && (() => {
+                            const l3Rows = buildL3Rows(child.children!, child.l3RowMeta);
+                            return (
+                              <div style={{
+                                maxHeight: expandedL2.has(child.id)
+                                  ? `${l3Rows.length * L3_H}px` : "0px",
+                                overflow: "clip",
+                                transition: "max-height 0.25s cubic-bezier(0.4,0,0.2,1)",
+                              }}>
+                                {l3Rows.map((row, rowIdx) => {
+                                  const isTarget   = mergeDrag?.targetRowId === row.rowId;
+                                  const isMergeOk  = isTarget && mergeDrag?.valid;
+                                  const isMergeNg  = isTarget && !mergeDrag?.valid;
+                                  return (
+                                    <div key={row.rowId}
+                                      data-l3rowid={row.rowId}
+                                      data-l2id={child.id}
+                                      className={`flex border-t border-gray-100
+                                        ${editMode ? "" : "cursor-pointer hover:bg-blue-50/40"}
+                                        ${rowIdx % 2 === 0 ? "bg-slate-50/30" : "bg-white"}
+                                        ${isMergeOk ? "!bg-emerald-50 ring-1 ring-inset ring-emerald-400" : ""}
+                                        ${isMergeNg ? "!bg-red-50 ring-1 ring-inset ring-red-300" : ""}`}
+                                      style={{ height: L3_H }}
+                                      onClick={() => {
+                                        if (!editMode && row.items[0])
+                                          setL3EditTarget({ l2Id: child.id, child: row.items[0] });
                                       }}>
-                                      {l3.name}
+
+                                      {/* ── 라벨 열 ── */}
+                                      <div style={{ width: labelW, minWidth: labelW }}
+                                        className="sticky left-0 z-10 bg-white border-r border-gray-100 flex items-center gap-1 shrink-0 pl-6 pr-1">
+                                        {/* 체크박스 / 구분선 */}
+                                        {editMode ? (
+                                          <input type="checkbox"
+                                            checked={row.items.every(l3 => selectedL3Ids.has(l3.id))}
+                                            onChange={e => { e.stopPropagation(); row.items.forEach(l3 => toggleL3(l3.id)); }}
+                                            onClick={e => e.stopPropagation()}
+                                            className="w-3 h-3 accent-indigo-600 shrink-0 cursor-pointer"
+                                          />
+                                        ) : (
+                                          <div className="w-px h-3 bg-gray-200 shrink-0" />
+                                        )}
+
+                                        {/* 행 레이블 (병합 행에만) */}
+                                        {row.isMerged && (
+                                          editingRowLabel?.l2Id === child.id && editingRowLabel.rowId === row.rowId
+                                            ? <input
+                                                autoFocus
+                                                value={editingRowLabel.value}
+                                                onChange={e => setEditingRowLabel(p => p ? { ...p, value: e.target.value } : null)}
+                                                onBlur={() => {
+                                                  onUpdateL3RowLabel?.(child.id, row.rowId, editingRowLabel!.value);
+                                                  setEditingRowLabel(null);
+                                                }}
+                                                onKeyDown={e => {
+                                                  if (e.key === 'Enter' || e.key === 'Escape') {
+                                                    if (e.key === 'Enter') onUpdateL3RowLabel?.(child.id, row.rowId, editingRowLabel!.value);
+                                                    setEditingRowLabel(null);
+                                                  }
+                                                  e.stopPropagation();
+                                                }}
+                                                onClick={e => e.stopPropagation()}
+                                                className="w-12 text-[10px] px-1 border border-teal-400 rounded bg-white text-teal-700 font-bold outline-none shrink-0"
+                                              />
+                                            : <span
+                                                className="text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1 shrink-0 cursor-text select-none whitespace-nowrap"
+                                                onClick={e => { e.stopPropagation(); setEditingRowLabel({ l2Id: child.id, rowId: row.rowId, value: row.label ?? '' }); }}
+                                                title="클릭하여 행 레이블 편집">
+                                                {row.label || '레이블'}
+                                              </span>
+                                        )}
+
+                                        {/* 개별 항목들 */}
+                                        <div className="flex-1 flex items-center gap-0.5 min-w-0 overflow-hidden">
+                                          {row.items.map((l3, li) => {
+                                            const c3 = STATUS_COLORS[l3.status];
+                                            return (
+                                              <span key={l3.id} className="flex items-center gap-0.5 min-w-0 shrink-0">
+                                                {li > 0 && <span className="text-gray-300 text-[10px]">/</span>}
+                                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c3 }} />
+                                                <span className="text-[12px] text-gray-600 truncate font-medium max-w-[60px]">{l3.name}</span>
+                                                {editMode && row.isMerged && (
+                                                  <button
+                                                    onClick={e => { e.stopPropagation(); onUnmergeL3?.(child.id, l3.id); }}
+                                                    className="text-[10px] text-gray-300 hover:text-red-400 transition-colors shrink-0 leading-none"
+                                                    title="이 항목을 별도 행으로 분리">✕</button>
+                                                )}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+
+                                        {/* 병합 드래그 핸들 (편집모드) */}
+                                        {editMode && (
+                                          <div
+                                            className="w-4 h-full flex items-center justify-center text-gray-300 hover:text-indigo-400 cursor-grab shrink-0 select-none"
+                                            title="드래그하여 다른 행과 합치기"
+                                            onMouseDown={e => handleMergeHandleMouseDown(e, child.id, row.rowId)}>
+                                            ⣿
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* ── 차트 열 ── */}
+                                      <div className="flex-1 relative overflow-hidden isolate">
+                                        <MonthGrid monthLayout={monthLayout} />
+                                        {showToday && (
+                                          <div className="absolute top-0 bottom-0 w-px bg-red-400/20 pointer-events-none"
+                                            style={{ left: todayX }} />
+                                        )}
+                                        {row.items.map(l3 => {
+                                          const sx3 = xForDateStr(l3.startDate);
+                                          const ex3 = xForDateStr(l3.endDate) + daySlotW(l3.endDate);
+                                          const bw3 = Math.max(ex3 - sx3, daySlotW(l3.startDate));
+                                          const c3  = STATUS_COLORS[l3.status];
+                                          const isDragThisL3  = dragOffset?.type === 'l3' && dragOffset.l3Id === l3.id;
+                                          const isDragGroupL3 = dragOffset?.type === 'l3' && selectedL3Ids.has(dragOffset.l3Id) && selectedL3Ids.has(l3.id);
+                                          const l3UnitPx = dragOffset?.type === 'l3' && dragOffset.dayMode ? DAY_W : WEEK_W;
+                                          const previewPx3 = (isDragThisL3 || isDragGroupL3) ? (dragOffset?.weekOffset ?? 0) * l3UnitPx : 0;
+                                          return (
+                                            <Fragment key={l3.id}>
+                                              <div
+                                                className={`absolute z-10 rounded-full shadow-sm${editMode ? " cursor-ew-resize hover:shadow-md hover:ring-1 hover:ring-indigo-300" : ""}`}
+                                                style={{
+                                                  left: sx3 + previewPx3, top: (L3_H - BAR3_H) / 2,
+                                                  width: bw3, height: BAR3_H,
+                                                  backgroundColor: c3,
+                                                  opacity: previewPx3 !== 0 ? 1 : 0.75,
+                                                  outline: previewPx3 !== 0 ? `2px solid ${c3}` : undefined,
+                                                }}
+                                                onMouseDown={e => handleL3BarMouseDown(e, l3.id)}
+                                              />
+                                              <div className="absolute text-[11px] font-semibold whitespace-nowrap z-20 pointer-events-none"
+                                                style={{
+                                                  left: sx3 + previewPx3 + bw3 / 2,
+                                                  top: (L3_H - BAR3_H) / 2 - 13,
+                                                  transform: "translateX(-50%)", color: c3,
+                                                }}>
+                                                {l3.name}
+                                              </div>
+                                            </Fragment>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </Fragment>
                       );
                     })}
@@ -951,10 +1242,29 @@ export default function TimelineChart({
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className="text-xs text-indigo-700 font-medium flex-1">
-            바를 좌우로 드래그해 1주 단위로 이동 &nbsp;·&nbsp;
-            체크박스 선택 시 함께 이동 &nbsp;·&nbsp;
-            {selectedIds.size > 0 && <strong>{selectedIds.size}개 선택됨</strong>}
+            Lv1·Lv2 주 단위 &nbsp;·&nbsp;
+            Lv3 {anyExpanded ? "일 단위" : "주 단위"} 드래그
+            {skipWeekends && anyExpanded && <span className="text-emerald-600"> (주말 건너뜀)</span>}
+            {selectedIds.size > 0 && <> &nbsp;·&nbsp; <strong>Lv2 {selectedIds.size}개</strong></>}
+            {selectedL3Ids.size > 0 && <> &nbsp;·&nbsp; <strong>Lv3 {selectedL3Ids.size}개</strong></>}
           </span>
+          {/* Lv3 주말 건너뛰기 토글 */}
+          <button
+            onClick={() => setSkipWeekends(v => !v)}
+            title={skipWeekends ? "주말도 포함하여 이동 (캘린더 기준)" : "주말을 건너뛰고 영업일만 이동"}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all shrink-0
+              ${skipWeekends
+                ? "bg-emerald-600 text-white border-emerald-600"
+                : "bg-white text-gray-500 border-gray-300 hover:border-emerald-400 hover:text-emerald-600"}`}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <path d="M16 2v4M8 2v4M3 10h18" />
+              {skipWeekends
+                ? <path d="M8 14h.01M12 14h.01M8 18h.01M12 18h.01" />
+                : <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" />}
+            </svg>
+            {skipWeekends ? "영업일 기준" : "캘린더 기준"}
+          </button>
           <button onClick={exitEditMode}
             className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shrink-0">
             편집 종료
@@ -1038,16 +1348,38 @@ export default function TimelineChart({
 }
 
 /* ── 월 그리드 라인 ── */
-function MonthGrid({ monthGroups, weekW }: {
-  monthGroups: { month: number; count: number; startIdx: number; year: number }[];
-  weekW: number;
+function MonthGrid({ monthLayout }: {
+  monthLayout: Array<{ month: number; year: number; x: number; width: number; expanded: boolean }>;
 }) {
   return (
     <>
-      {monthGroups.map((mg, i) => (
-        <div key={i}
-          className={`absolute top-0 bottom-0 border-l ${mg.month === 1 ? "border-gray-300" : "border-gray-100"}`}
-          style={{ left: mg.startIdx * weekW }} />
+      {monthLayout.map((mg, i) => (
+        <Fragment key={i}>
+          <div
+            className={`absolute top-0 bottom-0 border-l ${mg.month === 1 ? "border-gray-300" : "border-gray-100"}`}
+            style={{ left: mg.x }} />
+          {mg.expanded && Array.from(
+            { length: new Date(mg.year, mg.month, 0).getDate() },
+            (_, d) => {
+              const dow = new Date(mg.year, mg.month - 1, d + 1).getDay(); // 0=일, 6=토
+              const isWeekend = dow === 0 || dow === 6;
+              return (
+                <Fragment key={d}>
+                  {isWeekend && (
+                    <div className="absolute top-0 bottom-0 pointer-events-none"
+                      style={{
+                        left: mg.x + d * DAY_W,
+                        width: DAY_W,
+                        backgroundColor: dow === 0 ? "rgba(239,68,68,0.07)" : "rgba(99,102,241,0.07)",
+                      }} />
+                  )}
+                  <div className="absolute top-0 bottom-0 border-l border-gray-100/50 pointer-events-none"
+                    style={{ left: mg.x + d * DAY_W }} />
+                </Fragment>
+              );
+            }
+          )}
+        </Fragment>
       ))}
     </>
   );
@@ -1410,7 +1742,53 @@ function PhaseEditorModal({ item, onSave, onClose }: {
   );
 }
 
+/* ── L3 행 그룹화 ── */
+function buildL3Rows(
+  items: Level3Item[],
+  meta: Record<string, { label: string }> = {},
+): L3Row[] {
+  const rows: L3Row[] = [];
+  const rowMap = new Map<string, L3Row>();
+  for (const l3 of items) {
+    if (l3.rowId) {
+      if (!rowMap.has(l3.rowId)) {
+        const row: L3Row = { rowId: l3.rowId, isMerged: true, items: [], label: meta[l3.rowId]?.label };
+        rowMap.set(l3.rowId, row);
+        rows.push(row);
+      }
+      rowMap.get(l3.rowId)!.items.push(l3);
+    } else {
+      rows.push({ rowId: l3.id, isMerged: false, items: [l3] });
+    }
+  }
+  return rows;
+}
+
+function datesOverlap(a: Level3Item, b: Level3Item): boolean {
+  return a.startDate <= b.endDate && b.startDate <= a.endDate;
+}
+
 /* ── 헬퍼 ── */
+function shiftDateByCalendarDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+function shiftDateByWorkdays(dateStr: string, workdays: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const dir = workdays >= 0 ? 1 : -1;
+  let remaining = Math.abs(workdays);
+  while (remaining > 0) {
+    dt.setDate(dt.getDate() + dir);
+    const dow = dt.getDay();
+    if (dow !== 0 && dow !== 6) remaining--;
+  }
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
 function buildWeeks(base: WDate, count: number): WDate[] {
   const result: WDate[] = [];
   let { year, month, week } = base;
