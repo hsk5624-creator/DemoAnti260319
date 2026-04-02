@@ -258,6 +258,62 @@ export default function TimelinePage() {
     });
   }, [saveUndo]);
 
+  const handleDuplicateLevel1 = useCallback((id: string) => {
+    setItems((prev) => {
+      const src = prev.find(i => i.id === id);
+      if (!src) return prev;
+      const newL1Id = generateId();
+      const copy: Level1Item = {
+        ...src,
+        id: newL1Id,
+        name: src.name + " (복사)",
+        children: src.children.map(l2 => {
+          const newL2Id = generateId();
+          return {
+            ...l2,
+            id: newL2Id,
+            parentId: newL1Id,
+            children: (l2.children ?? []).map(l3 => ({
+              ...l3,
+              id: generateId(),
+              parentId: newL2Id,
+            })),
+          };
+        }),
+      };
+      const idx = prev.findIndex(i => i.id === id);
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+  }, []);
+
+  const handleDuplicateLevel2 = useCallback((parentId: string, childId: string) => {
+    setItems((prev) => {
+      return prev.map(l1 => {
+        if (l1.id !== parentId) return l1;
+        const src = l1.children.find(c => c.id === childId);
+        if (!src) return l1;
+        const newL2Id = generateId();
+        const copy: Level2Item = {
+          ...src,
+          id: newL2Id,
+          name: src.name + " (복사)",
+          parentId,
+          children: (src.children ?? []).map(l3 => ({
+            ...l3,
+            id: generateId(),
+            parentId: newL2Id,
+          })),
+        };
+        const idx = l1.children.findIndex(c => c.id === childId);
+        const newChildren = [...l1.children];
+        newChildren.splice(idx + 1, 0, copy);
+        return { ...l1, children: newChildren };
+      });
+    });
+  }, []);
+
   const handleDeleteLevel2 = useCallback((parentId: string, childId: string) => {
     setItems((prev) => {
       const parent = prev.find((i) => i.id === parentId);
@@ -635,7 +691,7 @@ export default function TimelinePage() {
             {!readOnly && (
               <div className="space-y-3 lg:sticky lg:top-4">
                 <TimelineForm items={items} onAddLevel1={handleAddLevel1} onAddLevel2={handleAddLevel2} onAddLevel3={handleAddLevel3} />
-                <TaskList items={items} onDeleteLevel1={handleDeleteLevel1} onDeleteLevel2={handleDeleteLevel2} onDeleteLevel3={handleDeleteLevel3} />
+                <TaskList items={items} onDeleteLevel1={handleDeleteLevel1} onDeleteLevel2={handleDeleteLevel2} onDeleteLevel3={handleDeleteLevel3} onDuplicateLevel1={handleDuplicateLevel1} onDuplicateLevel2={handleDuplicateLevel2} />
               </div>
             )}
             <TimelineChart

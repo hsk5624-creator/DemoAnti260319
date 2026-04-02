@@ -8,9 +8,11 @@ interface Props {
   onDeleteLevel1: (id: string) => void;
   onDeleteLevel2: (parentId: string, childId: string) => void;
   onDeleteLevel3: (l2Id: string, childId: string) => void;
+  onDuplicateLevel1: (id: string) => void;
+  onDuplicateLevel2: (parentId: string, childId: string) => void;
 }
 
-export default function TaskList({ items, onDeleteLevel1, onDeleteLevel2, onDeleteLevel3 }: Props) {
+export default function TaskList({ items, onDeleteLevel1, onDeleteLevel2, onDeleteLevel3, onDuplicateLevel1, onDuplicateLevel2 }: Props) {
   const [collapsedL1, setCollapsedL1] = useState<Set<string>>(new Set());
   const [collapsedL2, setCollapsedL2] = useState<Set<string>>(new Set());
 
@@ -59,6 +61,14 @@ export default function TaskList({ items, onDeleteLevel1, onDeleteLevel2, onDele
                   {range && <span className="ml-2 text-[10px] text-gray-400">{range.start.slice(0, 7)} ~ {range.end.slice(0, 7)}</span>}
                   {hasL2 && <span className="ml-1.5 text-[10px] text-gray-400">({item.children.length})</span>}
                 </div>
+                <button onClick={(e) => { e.stopPropagation(); onDuplicateLevel1(item.id); }}
+                  className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-400 transition-all shrink-0 p-0.5"
+                  title="그룹 복사">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                  </svg>
+                </button>
                 <button onClick={(e) => { e.stopPropagation(); onDeleteLevel1(item.id); }}
                   className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all text-xs px-1 shrink-0"
                   title="그룹 삭제">✕</button>
@@ -102,6 +112,14 @@ export default function TaskList({ items, onDeleteLevel1, onDeleteLevel2, onDele
                             {child.showOnLevel1 && <span className="ml-1 text-amber-400">◆</span>}
                           </span>
                         </div>
+                        <button onClick={(e) => { e.stopPropagation(); onDuplicateLevel2(item.id, child.id); }}
+                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-400 transition-all shrink-0 p-0.5"
+                          title="과제 복사">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                          </svg>
+                        </button>
                         <button onClick={(e) => { e.stopPropagation(); onDeleteLevel2(item.id, child.id); }}
                           className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all text-xs px-1 shrink-0"
                           title="삭제">✕</button>

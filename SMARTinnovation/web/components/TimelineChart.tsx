@@ -6,6 +6,7 @@ import {
   getLevel1Range, parseWDate, wdateToIndex, todayWDate, WDate,
   dateStrToFractionalWeek, shiftDateByWeeks,
 } from "@/lib/types";
+import { exportToExcel } from "@/lib/exportExcel";
 
 interface BulkShiftUpdate { parentId: string; childId: string; startDate: string; endDate: string; }
 interface BulkShiftL3Update { l2Id: string; l3Id: string; startDate: string; endDate: string; }
@@ -33,8 +34,12 @@ interface Props {
   onUpdateL3RowLabel?: (l2Id: string, rowId: string, label: string) => void;
 }
 
-const WEEK_W    = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
-const DAY_W     = 35;   // px per day   (expanded month)
+const WEEK_W      = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
+const MONTH_W     = 48;   // px per month (월 뷰)
+const QUARTER_W   = 24;   // px per month (분기 뷰)
+const DAY_W       = 35;   // px per day   (expanded month)
+
+type ViewMode = "week" | "month" | "quarter";
 const L1_BASE_H = 48;   // L1 기본 행 높이
 const L2_H      = 36;
 const BAR1_H    = 14;   // L1 pill height
@@ -113,6 +118,7 @@ export default function TimelineChart({
   const [colorPickerPos, setColorPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [skipWeekends,   setSkipWeekends]   = useState(false);
+  const [viewMode,       setViewMode]       = useState<ViewMode>("week");
   const skipWeekendsRef    = useRef(skipWeekends);
   const expandedMonthsRef  = useRef(expandedMonths);
   skipWeekendsRef.current    = skipWeekends;
@@ -409,7 +415,53 @@ export default function TimelineChart({
   }, [editMode, onReorderLevel1]);
 
   const [labelW,     setLabelW]     = useState(160);
-  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+  const dragRef    = useRef<{ startX: number; startW: number } | null>(null);
+  const outerRef   = useRef<HTMLDivElement>(null);
+  const scrollRef  = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportPNG = useCallback(async () => {
+    if (!outerRef.current || !scrollRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const scrollEl = scrollRef.current;
+      const outerEl  = outerRef.current;
+
+      const prevScrollOverflow  = scrollEl.style.overflow;
+      const prevScrollMaxHeight = scrollEl.style.maxHeight;
+      const prevOuterOverflow   = outerEl.style.overflow;
+
+      scrollEl.style.overflow  = "visible";
+      scrollEl.style.maxHeight = "none";
+      outerEl.style.overflow   = "visible";
+
+      await new Promise(r => setTimeout(r, 80));
+
+      const canvas = await html2canvas(outerEl, {
+        useCORS: true,
+        scale: 2,
+        backgroundColor: "#ffffff",
+        scrollX: 0,
+        scrollY: -window.scrollY,
+      });
+
+      scrollEl.style.overflow  = prevScrollOverflow;
+      scrollEl.style.maxHeight = prevScrollMaxHeight;
+      outerEl.style.overflow   = prevOuterOverflow;
+
+      const link = document.createElement("a");
+      link.download = `${title}_타임라인.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, title]);
+
+  const handleExportExcel = useCallback(() => {
+    exportToExcel(items, title);
+  }, [items, title]);
 
   const toggle = (id: string) =>
     setExpanded(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -459,8 +511,9 @@ export default function TimelineChart({
     return { weeks: ws, base, totalWeeks: total, ...buildGroups(ws) };
   }, [items]);
 
-  /* ── 월별 레이아웃 (확장 여부 반영) ── */
+  /* ── 월별 레이아웃 (확장 여부 + 뷰 모드 반영) ── */
   const { monthLayout, totalWidth, yearLayout } = useMemo(() => {
+    const baseMonthW = viewMode === "month" ? MONTH_W : viewMode === "quarter" ? QUARTER_W : 0;
     const ml: Array<{
       year: number; month: number; count: number; startIdx: number; week1: boolean;
       x: number; width: number; expanded: boolean;
@@ -468,9 +521,10 @@ export default function TimelineChart({
     let x = 0;
     for (const mg of monthGroups) {
       const key = `${mg.year}-${String(mg.month).padStart(2, "0")}`;
-      const isExp = expandedMonths.has(key);
+      const canExpand = viewMode === "week";
+      const isExp = canExpand && expandedMonths.has(key);
       const days = new Date(mg.year, mg.month, 0).getDate();
-      const width = isExp ? days * DAY_W : mg.count * WEEK_W;
+      const width = isExp ? days * DAY_W : viewMode === "week" ? mg.count * WEEK_W : baseMonthW;
       ml.push({ ...mg, x, width, expanded: isExp });
       x += width;
     }
@@ -483,7 +537,23 @@ export default function TimelineChart({
       }
     }
     return { monthLayout: ml, totalWidth: x, yearLayout: yl };
-  }, [monthGroups, expandedMonths]);
+  }, [monthGroups, expandedMonths, viewMode]);
+
+  /* ── 분기 레이아웃 (quarter 뷰 전용) ── */
+  const quarterLayout = useMemo(() => {
+    if (viewMode !== "quarter") return [] as { year: number; quarter: number; x: number; width: number }[];
+    const result: { year: number; quarter: number; x: number; width: number }[] = [];
+    for (const m of monthLayout) {
+      const q = Math.ceil(m.month / 3);
+      const last = result[result.length - 1];
+      if (!last || last.year !== m.year || last.quarter !== q) {
+        result.push({ year: m.year, quarter: q, x: m.x, width: m.width });
+      } else {
+        last.width += m.width;
+      }
+    }
+    return result;
+  }, [viewMode, monthLayout]);
 
   const toggleMonth = (year: number, month: number) => {
     const key = `${year}-${String(month).padStart(2, "0")}`;
@@ -499,7 +569,7 @@ export default function TimelineChart({
     const m = monthLayout.find(ml => ml.year === wd.year && ml.month === wd.month);
     if (!m) return 0;
     if (m.expanded) return m.x + (wd.week - 1) * 7 * DAY_W;
-    return m.x + (wd.week - 1) * WEEK_W;
+    return m.x + (wd.week - 1) * (m.width / 4);
   }
   // 날짜 → x 픽셀 (YYYY-MM-DD 문자열)
   function xForDateStr(dateStr: string): number {
@@ -511,21 +581,22 @@ export default function TimelineChart({
     const m = monthLayout.find(ml => ml.year === y && ml.month === mo);
     if (!m) return 0;
     if (m.expanded) return m.x + (d - 1) * DAY_W;
+    const weekW = m.width / 4;
     const week = Math.min(4, Math.ceil(d / 7));
     const dayInWeek = (d - 1) % 7;
-    return m.x + (week - 1) * WEEK_W + (dayInWeek / 7) * WEEK_W;
+    return m.x + (week - 1) * weekW + (dayInWeek / 7) * weekW;
   }
   // 한 슬롯(주) 폭
   function slotW(wd: WDate): number {
     const m = monthLayout.find(ml => ml.year === wd.year && ml.month === wd.month);
-    return m?.expanded ? 7 * DAY_W : WEEK_W;
+    return m?.expanded ? 7 * DAY_W : (m?.width ?? WEEK_W * 4) / 4;
   }
   // 하루 픽셀 폭
   function daySlotW(dateStr: string): number {
     const parts = dateStr.split("-");
     const y = Number(parts[0]), mo = Number(parts[1]);
     const m = monthLayout.find(ml => ml.year === y && ml.month === mo);
-    return m?.expanded ? DAY_W : WEEK_W / 7;
+    return m?.expanded ? DAY_W : (m?.width ?? WEEK_W * 4) / 28;
   }
 
   const todayRaw = new Date();
@@ -552,7 +623,7 @@ export default function TimelineChart({
 
   return (
     <>
-      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+      <div ref={outerRef} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
         {/* 타이틀 */}
         <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
           <div>
@@ -565,6 +636,20 @@ export default function TimelineChart({
             <Legend color="#94a3b8" label="예정" />
             <Legend color="#00733C" label="진행/완료" />
             <Legend color="#ef4444" label="핵심" />
+            {/* 뷰 모드 토글 */}
+            <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+              {(["week", "month", "quarter"] as ViewMode[]).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`px-2.5 py-1.5 transition-colors border-r border-gray-200 last:border-r-0
+                    ${viewMode === mode
+                      ? "bg-gray-800 text-white"
+                      : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                  {mode === "week" ? "주" : mode === "month" ? "월" : "분기"}
+                </button>
+              ))}
+            </div>
             {onBulkShift && (
               <button
                 onClick={() => editMode ? exitEditMode() : setEditMode(true)}
@@ -578,10 +663,35 @@ export default function TimelineChart({
                 {editMode ? "편집 종료" : "편집"}
               </button>
             )}
+            {/* 구분선 */}
+            <div className="w-px h-5 bg-gray-200" />
+            {/* Excel 내보내기 */}
+            <button
+              onClick={handleExportExcel}
+              title="Excel 내보내기"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+              </svg>
+              Excel
+            </button>
+            {/* PNG 내보내기 */}
+            <button
+              onClick={handleExportPNG}
+              disabled={exporting}
+              title="이미지(PNG) 내보내기"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white text-sky-700 border-sky-200 hover:bg-sky-50 disabled:opacity-50 disabled:cursor-wait">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21" />
+              </svg>
+              {exporting ? "캡처 중..." : "PNG"}
+            </button>
           </div>
         </div>
 
-        <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
+        <div ref={scrollRef} className="overflow-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
           <div style={{ minWidth: labelW + totalWidth }}>
 
             {/* ━━━ 헤더 ━━━ */}
@@ -608,25 +718,38 @@ export default function TimelineChart({
                     </div>
                   ))}
                 </div>
-                {/* 월 행 — 클릭으로 일별 펼치기 */}
-                <div className={`flex${anyExpanded ? " border-b border-gray-700" : ""}`}>
-                  {monthLayout.map((mg, i) => (
-                    <div key={i}
-                      style={{ width: mg.width }}
-                      onClick={() => toggleMonth(mg.year, mg.month)}
-                      title={mg.expanded ? "클릭하여 주 단위로 축소" : "클릭하여 일 단위로 펼치기"}
-                      className={`text-center py-1.5 border-r border-gray-700 last:border-r-0 select-none cursor-pointer
-                        transition-colors hover:bg-gray-700
-                        ${mg.month === 1
-                          ? "text-[13px] font-extrabold text-green-300"
-                          : "text-[12px] font-semibold text-gray-300"}
-                        ${mg.expanded ? "bg-gray-700 text-white" : ""}`}>
-                      {mg.month}{mg.expanded ? "▾" : ""}
-                    </div>
-                  ))}
-                </div>
-                {/* 일 행 — 확장된 월만 표시 */}
-                {anyExpanded && (
+                {/* 분기 뷰: Q1~Q4 행 */}
+                {viewMode === "quarter" ? (
+                  <div className="flex">
+                    {quarterLayout.map((qg, i) => (
+                      <div key={i}
+                        style={{ width: qg.width }}
+                        className="text-center py-1.5 border-r border-gray-700 last:border-r-0 text-[12px] font-bold text-amber-300 select-none">
+                        Q{qg.quarter}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* 주/월 뷰: 월 행 — 주 뷰에서만 클릭으로 일별 펼치기 */
+                  <div className={`flex${anyExpanded ? " border-b border-gray-700" : ""}`}>
+                    {monthLayout.map((mg, i) => (
+                      <div key={i}
+                        style={{ width: mg.width }}
+                        onClick={() => viewMode === "week" && toggleMonth(mg.year, mg.month)}
+                        title={viewMode === "week" ? (mg.expanded ? "클릭하여 주 단위로 축소" : "클릭하여 일 단위로 펼치기") : undefined}
+                        className={`text-center py-1.5 border-r border-gray-700 last:border-r-0 select-none
+                          ${viewMode === "week" ? "cursor-pointer transition-colors hover:bg-gray-700" : "cursor-default"}
+                          ${mg.month === 1
+                            ? "text-[13px] font-extrabold text-green-300"
+                            : "text-[12px] font-semibold text-gray-300"}
+                          ${mg.expanded ? "bg-gray-700 text-white" : ""}`}>
+                        {mg.month}{mg.expanded ? "▾" : ""}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* 일 행 — 주 뷰 + 확장된 월만 표시 */}
+                {viewMode === "week" && anyExpanded && (
                   <div className="flex">
                     {monthLayout.map((mg, i) => {
                       if (!mg.expanded) {
