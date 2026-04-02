@@ -26,12 +26,12 @@ export function loadAllRecords(forceReload = false): MRORecord[] {
 
   const files = fs
     .readdirSync(DATA_DIR)
-    .filter((f) => f.endsWith(".xls") || f.endsWith(".xlsx"));
+    .filter((f) => (f.endsWith(".xls") || f.endsWith(".xlsx")) && !f.includes("2024"));
 
   const all: MRORecord[] = [];
   for (const f of files) {
     try {
-      const records = parseExcelFile(path.join(DATA_DIR, f));
+      const records = parseExcelFile(path.join(DATA_DIR, f)).filter((r) => r.year !== 2024);
       all.push(...records);
     } catch (e) {
       console.error(`[dataStore] Failed to parse ${f}:`, e);
@@ -60,9 +60,9 @@ export function getFileList(): { name: string; isHistory: boolean }[] {
   if (!fs.existsSync(DATA_DIR)) return [];
   return fs
     .readdirSync(DATA_DIR)
-    .filter((f) => f.endsWith(".xls") || f.endsWith(".xlsx"))
+    .filter((f) => (f.endsWith(".xls") || f.endsWith(".xlsx")) && !f.includes("2024"))
     .map((name) => ({
       name,
-      isHistory: name.includes("2024") || name.includes("2025"),
+      isHistory: name.includes("2025"),
     }));
 }
