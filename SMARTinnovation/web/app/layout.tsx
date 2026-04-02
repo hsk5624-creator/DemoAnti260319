@@ -6,8 +6,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SMART Innovation - 로드맵 타임라인",
-  description: "과제별 로드맵 타임라인 자동 생성 대시보드",
+  title: "프로젝트 타임라인 관리 시스템",
+  description: "프로젝트 타임라인 관리 시스템",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

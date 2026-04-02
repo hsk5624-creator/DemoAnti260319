@@ -113,8 +113,8 @@ export default function LandingPage() {
     return (
       <div className="min-h-screen bg-[#00733C] flex flex-col items-center justify-center">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-white tracking-tight">SMART Innovation</h1>
-          <p className="text-green-200 text-sm mt-1">로드맵 타임라인 대시보드</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">프로젝트 타임라인 관리 시스템</h1>
+          <p className="text-green-200 text-sm mt-1">프로젝트 타임라인 관리 시스템</p>
         </div>
         <PasswordModal
           title="접속 비밀번호 입력"
@@ -130,8 +130,8 @@ export default function LandingPage() {
       <header className="bg-[#00733C] text-white shadow-lg">
         <div className="w-full px-6 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">SMART Innovation</h1>
-            <p className="text-green-200 text-xs mt-0.5">로드맵 타임라인 대시보드</p>
+            <h1 className="text-xl font-bold tracking-tight">프로젝트 타임라인 관리 시스템</h1>
+            <p className="text-green-200 text-xs mt-0.5">프로젝트 타임라인 관리 시스템</p>
           </div>
         </div>
       </header>

@@ -555,7 +555,7 @@ export default function TimelinePage() {
               </button>
             )}
             <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-green-200 text-xs">로드맵 과제별 타임라인 자동 생성</p>
+              <p className="text-green-200 text-xs">프로젝트 타임라인 관리 시스템</p>
               {readOnly
                 ? <span className="text-[10px] font-semibold bg-white/20 text-green-100 rounded-full px-2 py-0.5">조회 모드</span>
                 : <span className="text-[10px] font-semibold bg-indigo-500/80 text-white rounded-full px-2 py-0.5">편집 모드</span>
