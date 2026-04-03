@@ -442,28 +442,56 @@ export default function TimelineChart({
     const scrollEl = scrollRef.current;
     const outerEl  = outerRef.current;
 
-    const prevScrollOverflow  = scrollEl.style.overflow;
-    const prevScrollMaxHeight = scrollEl.style.maxHeight;
-    const prevOuterOverflow   = outerEl.style.overflow;
+    // 원본 상태 저장
+    const saved = {
+      scrollOverflow:  scrollEl.style.overflow,
+      scrollMaxHeight: scrollEl.style.maxHeight,
+      outerOverflow:   outerEl.style.overflow,
+      scrollLeft:      scrollEl.scrollLeft,
+      scrollTop:       scrollEl.scrollTop,
+      stickyEls:       [] as { el: HTMLElement; pos: string }[],
+    };
 
     try {
       const { default: html2canvas } = await import("html2canvas");
 
+      // 1) overflow 제거
       scrollEl.style.overflow  = "visible";
       scrollEl.style.maxHeight = "none";
       outerEl.style.overflow   = "visible";
 
-      await new Promise(r => setTimeout(r, 100));
+      // 2) sticky → relative (html2canvas 호환 문제 해결)
+      outerEl.querySelectorAll("*").forEach(node => {
+        const el = node as HTMLElement;
+        try {
+          if (getComputedStyle(el).position === "sticky") {
+            saved.stickyEls.push({ el, pos: el.style.position });
+            el.style.position = "relative";
+          }
+        } catch {}
+      });
+
+      // 3) 스크롤 원점으로
+      scrollEl.scrollLeft = 0;
+      scrollEl.scrollTop  = 0;
+
+      await new Promise(r => setTimeout(r, 150));
+
+      // 4) 캔버스 크기 제한 (Chrome 16384px)
+      const w = outerEl.scrollWidth;
+      const h = outerEl.scrollHeight;
+      const scale = Math.min(2, 16384 / Math.max(w, h));
 
       const canvas = await html2canvas(outerEl, {
         useCORS: true,
-        scale: 2,
+        scale,
         backgroundColor: "#ffffff",
-        width:  outerEl.scrollWidth,
-        height: outerEl.scrollHeight,
+        width: w,
+        height: h,
+        scrollX: 0,
+        scrollY: 0,
       });
 
-      // toBlob + createObjectURL — toDataURL보다 크기 제한 없이 안정적
       canvas.toBlob(blob => {
         if (!blob) return;
         const url  = URL.createObjectURL(blob);
@@ -478,9 +506,13 @@ export default function TimelineChart({
     } catch (err) {
       console.error("PNG export error:", err);
     } finally {
-      scrollEl.style.overflow  = prevScrollOverflow;
-      scrollEl.style.maxHeight = prevScrollMaxHeight;
-      outerEl.style.overflow   = prevOuterOverflow;
+      // 모든 상태 원복
+      scrollEl.style.overflow  = saved.scrollOverflow;
+      scrollEl.style.maxHeight = saved.scrollMaxHeight;
+      outerEl.style.overflow   = saved.outerOverflow;
+      scrollEl.scrollLeft      = saved.scrollLeft;
+      scrollEl.scrollTop       = saved.scrollTop;
+      saved.stickyEls.forEach(({ el, pos }) => { el.style.position = pos; });
       setExporting(false);
     }
   }, [exporting, title]);
