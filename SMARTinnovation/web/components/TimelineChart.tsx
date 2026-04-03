@@ -416,9 +416,25 @@ export default function TimelineChart({
 
   const [labelW,     setLabelW]     = useState(160);
   const dragRef    = useRef<{ startX: number; startW: number } | null>(null);
-  const outerRef   = useRef<HTMLDivElement>(null);
-  const scrollRef  = useRef<HTMLDivElement>(null);
+  const outerRef        = useRef<HTMLDivElement>(null);
+  const scrollRef       = useRef<HTMLDivElement>(null);
+  const topScrollRef    = useRef<HTMLDivElement>(null);
+  const syncingScroll   = useRef(false);
   const [exporting, setExporting] = useState(false);
+
+  const onTopScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (scrollRef.current) scrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    syncingScroll.current = false;
+  }, []);
+
+  const onMainScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (topScrollRef.current) topScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    syncingScroll.current = false;
+  }, []);
 
   const handleExportPNG = useCallback(async () => {
     if (!outerRef.current || !scrollRef.current || exporting) return;
@@ -701,7 +717,17 @@ export default function TimelineChart({
           </div>
         </div>
 
-        <div ref={scrollRef} className="overflow-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
+        {/* 상단 스크롤바 */}
+        <div
+          ref={topScrollRef}
+          onScroll={onTopScroll}
+          className="overflow-x-auto overflow-y-hidden border-b border-gray-100"
+          style={{ height: 14 }}
+        >
+          <div style={{ minWidth: labelW + totalWidth, height: 1 }} />
+        </div>
+
+        <div ref={scrollRef} onScroll={onMainScroll} className="overflow-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
           <div style={{ minWidth: labelW + totalWidth }}>
 
             {/* ━━━ 헤더 ━━━ */}
