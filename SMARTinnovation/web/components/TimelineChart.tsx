@@ -423,38 +423,48 @@ export default function TimelineChart({
   const handleExportPNG = useCallback(async () => {
     if (!outerRef.current || !scrollRef.current || exporting) return;
     setExporting(true);
+    const scrollEl = scrollRef.current;
+    const outerEl  = outerRef.current;
+
+    const prevScrollOverflow  = scrollEl.style.overflow;
+    const prevScrollMaxHeight = scrollEl.style.maxHeight;
+    const prevOuterOverflow   = outerEl.style.overflow;
+
     try {
       const { default: html2canvas } = await import("html2canvas");
-      const scrollEl = scrollRef.current;
-      const outerEl  = outerRef.current;
-
-      const prevScrollOverflow  = scrollEl.style.overflow;
-      const prevScrollMaxHeight = scrollEl.style.maxHeight;
-      const prevOuterOverflow   = outerEl.style.overflow;
 
       scrollEl.style.overflow  = "visible";
       scrollEl.style.maxHeight = "none";
       outerEl.style.overflow   = "visible";
 
-      await new Promise(r => setTimeout(r, 80));
+      await new Promise(r => setTimeout(r, 100));
 
       const canvas = await html2canvas(outerEl, {
         useCORS: true,
         scale: 2,
         backgroundColor: "#ffffff",
-        scrollX: 0,
-        scrollY: -window.scrollY,
+        width:  outerEl.scrollWidth,
+        height: outerEl.scrollHeight,
       });
 
+      // toBlob + createObjectURL — toDataURL보다 크기 제한 없이 안정적
+      canvas.toBlob(blob => {
+        if (!blob) return;
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.download = `${title}_타임라인.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, "image/png");
+    } catch (err) {
+      console.error("PNG export error:", err);
+    } finally {
       scrollEl.style.overflow  = prevScrollOverflow;
       scrollEl.style.maxHeight = prevScrollMaxHeight;
       outerEl.style.overflow   = prevOuterOverflow;
-
-      const link = document.createElement("a");
-      link.download = `${title}_타임라인.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    } finally {
       setExporting(false);
     }
   }, [exporting, title]);
