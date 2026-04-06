@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef, useCallback, Fragment } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect, Fragment } from "react";
 import {
   Level1Item, Level2Item, Level3Item, PhaseSegment, TaskStatus, STATUS_COLORS,
   getLevel1Range, parseWDate, wdateToIndex, todayWDate, WDate,
@@ -122,7 +122,11 @@ export default function TimelineChart({
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [skipWeekends,   setSkipWeekends]   = useState(false);
   const [viewMode,       setViewMode]       = useState<ViewMode>("week");
-  const [sortAssignee,   setSortAssignee]   = useState<"none" | "asc" | "desc">("none");
+  const [sortAssignee,       setSortAssignee]       = useState<"none" | "asc" | "desc">("none");
+  const [filterAssignees,    setFilterAssignees]    = useState<Set<string>>(new Set()); // 비어있으면 전체
+  const [assigneeSearch,     setAssigneeSearch]     = useState("");
+  const [assigneeDropOpen,   setAssigneeDropOpen]   = useState(false);
+  const assigneeDropRef = useRef<HTMLDivElement>(null);
   const skipWeekendsRef    = useRef(skipWeekends);
   const expandedMonthsRef  = useRef(expandedMonths);
   skipWeekendsRef.current    = skipWeekends;
@@ -143,6 +147,17 @@ export default function TimelineChart({
 
   const onMergeL3Ref = useRef(onMergeL3);
   onMergeL3Ref.current = onMergeL3;
+
+  // 담당자 드롭다운 외부 클릭 닫기
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (assigneeDropRef.current && !assigneeDropRef.current.contains(e.target as Node)) {
+        setAssigneeDropOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   // L1 행 순서 변경 드래그 상태
   const [reorderDraggingId,  setReorderDraggingId]  = useState<string | null>(null);
@@ -712,19 +727,134 @@ export default function TimelineChart({
                 </button>
               ))}
             </div>
-            {/* 담당자 정렬 */}
-            <button
-              onClick={() => setSortAssignee(s => s === "none" ? "asc" : s === "asc" ? "desc" : "none")}
-              title={sortAssignee === "none" ? "담당자 오름차순 정렬" : sortAssignee === "asc" ? "담당자 내림차순 정렬" : "정렬 해제"}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border
-                ${sortAssignee !== "none"
-                  ? "bg-amber-500 text-white border-amber-500"
-                  : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M6 12h12M9 17h6" />
-              </svg>
-              담당자{sortAssignee === "asc" ? " ↑" : sortAssignee === "desc" ? " ↓" : ""}
-            </button>
+            {/* 담당자 필터/정렬 드롭다운 */}
+            {(() => {
+              const allAssignees = Array.from(new Set(
+                items.flatMap(l1 => l1.children.map(l2 => l2.assignee || "(미지정)"))
+              )).sort((a, b) => a.localeCompare(b, "ko"));
+              const isActive = filterAssignees.size > 0 || sortAssignee !== "none";
+              const filtered = allAssignees.filter(a =>
+                !assigneeSearch || a.includes(assigneeSearch)
+              );
+              return (
+                <div ref={assigneeDropRef} className="relative">
+                  <button
+                    onClick={() => setAssigneeDropOpen(o => !o)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border
+                      ${isActive
+                        ? "bg-amber-500 text-white border-amber-500"
+                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M6 12h12M9 17h6" />
+                    </svg>
+                    담당자
+                    {filterAssignees.size > 0 && <span className="ml-0.5">({filterAssignees.size})</span>}
+                    {sortAssignee !== "none" && <span className="ml-0.5">{sortAssignee === "asc" ? "↑" : "↓"}</span>}
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
+                      className={`transition-transform ${assigneeDropOpen ? "rotate-180" : ""}`}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {assigneeDropOpen && (
+                    <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg w-52 overflow-hidden">
+                      {/* 검색 */}
+                      <div className="px-3 pt-3 pb-2">
+                        <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-2 py-1.5">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="text-gray-400 shrink-0">
+                            <circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35"/>
+                          </svg>
+                          <input
+                            autoFocus
+                            type="text"
+                            value={assigneeSearch}
+                            onChange={e => setAssigneeSearch(e.target.value)}
+                            placeholder="담당자 검색..."
+                            className="flex-1 text-xs outline-none text-gray-700 placeholder-gray-300 bg-transparent"
+                          />
+                          {assigneeSearch && (
+                            <button onClick={() => setAssigneeSearch("")} className="text-gray-300 hover:text-gray-500">
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 정렬 */}
+                      <div className="px-3 pb-2 flex gap-1.5">
+                        {(["asc", "desc"] as const).map(dir => (
+                          <button key={dir}
+                            onClick={() => setSortAssignee(s => s === dir ? "none" : dir)}
+                            className={`flex-1 py-1 rounded-md text-[10px] font-semibold border transition-colors
+                              ${sortAssignee === dir
+                                ? "bg-amber-500 text-white border-amber-500"
+                                : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                            {dir === "asc" ? "가나다 ↑" : "가나다 ↓"}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="border-t border-gray-100" />
+
+                      {/* 전체 선택/해제 */}
+                      <div className="px-3 py-1.5 flex items-center justify-between">
+                        <button
+                          onClick={() => setFilterAssignees(new Set())}
+                          className="text-[10px] text-blue-500 hover:text-blue-700 font-semibold">
+                          전체 선택
+                        </button>
+                        {filterAssignees.size > 0 && (
+                          <button
+                            onClick={() => { setFilterAssignees(new Set()); setSortAssignee("none"); setAssigneeDropOpen(false); }}
+                            className="text-[10px] text-gray-400 hover:text-red-500 font-semibold">
+                            초기화
+                          </button>
+                        )}
+                      </div>
+
+                      {/* 담당자 목록 */}
+                      <div className="max-h-48 overflow-y-auto pb-2">
+                        {filtered.length === 0 && (
+                          <p className="text-center text-xs text-gray-300 py-3">결과 없음</p>
+                        )}
+                        {filtered.map(name => {
+                          const checked = filterAssignees.size === 0 || filterAssignees.has(name);
+                          return (
+                            <label key={name}
+                              className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                              <input type="checkbox" checked={checked}
+                                onChange={() => {
+                                  setFilterAssignees(prev => {
+                                    const next = new Set(prev.size === 0 ? allAssignees : prev);
+                                    if (next.has(name)) next.delete(name); else next.add(name);
+                                    // 전부 선택이면 필터 해제
+                                    if (next.size === allAssignees.length) return new Set();
+                                    return next;
+                                  });
+                                }}
+                                className="w-3.5 h-3.5 accent-amber-500 shrink-0"
+                              />
+                              <span className="text-xs text-gray-700 truncate">{name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {/* 적용 버튼 */}
+                      <div className="border-t border-gray-100 px-3 py-2">
+                        <button
+                          onClick={() => setAssigneeDropOpen(false)}
+                          className="w-full py-1.5 rounded-lg bg-gray-800 text-white text-xs font-semibold hover:bg-gray-700 transition-colors">
+                          적용
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {onBulkShift && (
               <button
                 onClick={() => editMode ? exitEditMode() : setEditMode(true)}
@@ -892,13 +1022,13 @@ export default function TimelineChart({
             {/* ━━━ 본문 (L1 + L2) ━━━ */}
             {/* 순서 변경 드래그 중: 전체 차트에 grabbing 커서 */}
             <style>{reorderDraggingId ? "* { cursor: grabbing !important; }" : ""}</style>
-            {(sortAssignee === "none" ? items : items.map(item => ({
+            {items.map(item => ({
               ...item,
-              children: [...item.children].sort((a, b) => {
-                const cmp = a.assignee.localeCompare(b.assignee, "ko");
-                return sortAssignee === "asc" ? cmp : -cmp;
-              }),
-            }))).map((item, itemIdx) => {
+              children: item.children
+                .filter(l2 => filterAssignees.size === 0 || filterAssignees.has(l2.assignee || "(미지정)"))
+                .sort((a, b) => sortAssignee === "none" ? 0
+                  : (sortAssignee === "asc" ? 1 : -1) * a.assignee.localeCompare(b.assignee, "ko")),
+            })).map((item, itemIdx) => {
               const range      = getLevel1Range(item);
               const isExpanded = expanded.has(item.id);
               const l2TotalH   = item.children.reduce((sum, l2) => {
