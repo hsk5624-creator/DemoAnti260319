@@ -7,6 +7,7 @@ import {
   EMPTY_DETAIL_DATA, EMPTY_BOM,
   loadProjectDetails, saveProjectDetail,
 } from "@/lib/projectDetails";
+import { exportProjectDetails } from "@/lib/exportExcel";
 
 interface Props {
   timelineId: string;
@@ -281,7 +282,19 @@ export default function ProjectDetailsBoard({
           <h2 className="text-base font-bold text-gray-900">프로젝트별 상세정보</h2>
           <p className="text-xs text-gray-400 mt-0.5">각 과제(LV1)의 BOM, 배치사이즈 등 상세정보를 관리합니다.</p>
         </div>
-        <span className="text-xs text-gray-400">{items.length}개 과제</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-400">{items.length}개 과제</span>
+          {items.length > 0 && (
+            <button
+              onClick={() => exportProjectDetails(items, detailsMap, "프로젝트상세")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 transition-colors">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+              </svg>
+              Excel 다운로드
+            </button>
+          )}
+        </div>
       </div>
 
       {items.length === 0 && (
