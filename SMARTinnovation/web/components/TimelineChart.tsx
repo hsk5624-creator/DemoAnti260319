@@ -7,6 +7,7 @@ import {
   dateStrToFractionalWeek, shiftDateByWeeks,
 } from "@/lib/types";
 import { exportToExcel } from "@/lib/exportExcel";
+import { getMonthHolidays } from "@/lib/holidays";
 
 interface BulkShiftUpdate { parentId: string; childId: string; startDate: string; endDate: string; }
 interface BulkShiftL3Update { l2Id: string; l3Id: string; startDate: string; endDate: string; }
@@ -119,6 +120,7 @@ export default function TimelineChart({
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [skipWeekends,   setSkipWeekends]   = useState(false);
   const [viewMode,       setViewMode]       = useState<ViewMode>("week");
+  const [sortAssignee,   setSortAssignee]   = useState<"none" | "asc" | "desc">("none");
   const skipWeekendsRef    = useRef(skipWeekends);
   const expandedMonthsRef  = useRef(expandedMonths);
   skipWeekendsRef.current    = skipWeekends;
@@ -708,6 +710,19 @@ export default function TimelineChart({
                 </button>
               ))}
             </div>
+            {/* 담당자 정렬 */}
+            <button
+              onClick={() => setSortAssignee(s => s === "none" ? "asc" : s === "asc" ? "desc" : "none")}
+              title={sortAssignee === "none" ? "담당자 오름차순 정렬" : sortAssignee === "asc" ? "담당자 내림차순 정렬" : "정렬 해제"}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border
+                ${sortAssignee !== "none"
+                  ? "bg-amber-500 text-white border-amber-500"
+                  : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M6 12h12M9 17h6" />
+              </svg>
+              담당자{sortAssignee === "asc" ? " ↑" : sortAssignee === "desc" ? " ↓" : ""}
+            </button>
             {onBulkShift && (
               <button
                 onClick={() => editMode ? exitEditMode() : setEditMode(true)}
@@ -816,6 +831,28 @@ export default function TimelineChart({
                     ))}
                   </div>
                 )}
+                {/* 주 행 — 주 뷰에서 W1~W4 표시 */}
+                {viewMode === "week" && (
+                  <div className="flex border-b border-gray-700">
+                    {monthLayout.map((mg, i) => {
+                      if (mg.expanded) {
+                        return <div key={i} style={{ width: mg.width }} className="border-r border-gray-700 last:border-r-0" />;
+                      }
+                      const weeks = mg.count ?? 4;
+                      return (
+                        <div key={i} style={{ width: mg.width }} className="flex border-r border-gray-700 last:border-r-0">
+                          {Array.from({ length: weeks }, (_, w) => (
+                            <div key={w}
+                              style={{ width: WEEK_W, minWidth: WEEK_W }}
+                              className="text-center text-[9px] py-0.5 border-r border-gray-700 last:border-r-0 shrink-0 text-gray-400 font-medium">
+                              {w + 1}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {/* 일 행 — 주 뷰 + 확장된 월만 표시 */}
                 {viewMode === "week" && anyExpanded && (
                   <div className="flex">
@@ -824,16 +861,20 @@ export default function TimelineChart({
                         return <div key={i} style={{ width: mg.width }} className="border-r border-gray-700 last:border-r-0" />;
                       }
                       const days = new Date(mg.year, mg.month, 0).getDate();
+                      const holidays = getMonthHolidays(mg.year, mg.month);
                       return (
                         <div key={i} style={{ width: mg.width }} className="flex border-r border-gray-600 last:border-r-0">
                           {Array.from({ length: days }, (_, d) => {
                             const dow = new Date(mg.year, mg.month - 1, d + 1).getDay();
                             const isSun = dow === 0, isSat = dow === 6;
+                            const holiday = holidays.get(d + 1);
+                            const isHoliday = !!holiday;
                             return (
                               <div key={d}
+                                title={holiday}
                                 style={{ width: DAY_W, minWidth: DAY_W }}
                                 className={`text-center text-[9px] py-0.5 border-r border-gray-700 last:border-r-0 shrink-0 overflow-hidden font-medium
-                                  ${isSun ? "text-red-400 bg-red-900/20" : isSat ? "text-indigo-400 bg-indigo-900/20" : "text-gray-400"}`}>
+                                  ${isHoliday || isSun ? "text-red-400 bg-red-900/20" : isSat ? "text-indigo-400 bg-indigo-900/20" : "text-gray-400"}`}>
                                 {d + 1}
                               </div>
                             );
@@ -849,7 +890,13 @@ export default function TimelineChart({
             {/* ━━━ 본문 (L1 + L2) ━━━ */}
             {/* 순서 변경 드래그 중: 전체 차트에 grabbing 커서 */}
             <style>{reorderDraggingId ? "* { cursor: grabbing !important; }" : ""}</style>
-            {items.map((item, itemIdx) => {
+            {(sortAssignee === "none" ? items : items.map(item => ({
+              ...item,
+              children: [...item.children].sort((a, b) => {
+                const cmp = a.assignee.localeCompare(b.assignee, "ko");
+                return sortAssignee === "asc" ? cmp : -cmp;
+              }),
+            }))).map((item, itemIdx) => {
               const range      = getLevel1Range(item);
               const isExpanded = expanded.has(item.id);
               const l2TotalH   = item.children.reduce((sum, l2) => {
@@ -972,7 +1019,7 @@ export default function TimelineChart({
                     {/* 차트 열 */}
                     <div className="flex-1 relative overflow-hidden isolate">
                       {/* 그리드 */}
-                      <MonthGrid monthLayout={monthLayout} />
+                      <MonthGrid monthLayout={monthLayout} viewMode={viewMode} />
 
                       {/* 오늘 라인 */}
                       {showToday && (
@@ -1204,7 +1251,7 @@ export default function TimelineChart({
 
                           {/* 차트 */}
                           <div className="flex-1 relative overflow-hidden isolate">
-                            <MonthGrid monthLayout={monthLayout} />
+                            <MonthGrid monthLayout={monthLayout} viewMode={viewMode} />
                             {showToday && (
                               <div className="absolute top-0 bottom-0 w-px bg-red-400/30 pointer-events-none"
                                 style={{ left: todayX }} />
@@ -1354,7 +1401,7 @@ export default function TimelineChart({
 
                                       {/* ── 차트 열 ── */}
                                       <div className="flex-1 relative overflow-hidden isolate">
-                                        <MonthGrid monthLayout={monthLayout} />
+                                        <MonthGrid monthLayout={monthLayout} viewMode={viewMode} />
                                         {showToday && (
                                           <div className="absolute top-0 bottom-0 w-px bg-red-400/20 pointer-events-none"
                                             style={{ left: todayX }} />
@@ -1539,8 +1586,9 @@ export default function TimelineChart({
 }
 
 /* ── 월 그리드 라인 ── */
-function MonthGrid({ monthLayout }: {
-  monthLayout: Array<{ month: number; year: number; x: number; width: number; expanded: boolean }>;
+function MonthGrid({ monthLayout, viewMode }: {
+  monthLayout: Array<{ month: number; year: number; x: number; width: number; expanded: boolean; count?: number }>;
+  viewMode?: string;
 }) {
   return (
     <>
@@ -1549,19 +1597,30 @@ function MonthGrid({ monthLayout }: {
           <div
             className={`absolute top-0 bottom-0 border-l ${mg.month === 1 ? "border-gray-300" : "border-gray-100"}`}
             style={{ left: mg.x }} />
+          {/* 주 구분선 (week view, 확장되지 않은 월) */}
+          {viewMode === "week" && !mg.expanded && (mg.count ?? 4) > 1 && Array.from(
+            { length: (mg.count ?? 4) - 1 },
+            (_, w) => (
+              <div key={`w${w}`}
+                className="absolute top-0 bottom-0 border-l border-dashed border-gray-200 pointer-events-none"
+                style={{ left: mg.x + (w + 1) * WEEK_W }} />
+            )
+          )}
           {mg.expanded && Array.from(
             { length: new Date(mg.year, mg.month, 0).getDate() },
             (_, d) => {
               const dow = new Date(mg.year, mg.month - 1, d + 1).getDay(); // 0=일, 6=토
+              const holiday = getMonthHolidays(mg.year, mg.month).get(d + 1);
+              const isHoliday = !!holiday;
               const isWeekend = dow === 0 || dow === 6;
               return (
                 <Fragment key={d}>
-                  {isWeekend && (
+                  {(isWeekend || isHoliday) && (
                     <div className="absolute top-0 bottom-0 pointer-events-none"
                       style={{
                         left: mg.x + d * DAY_W,
                         width: DAY_W,
-                        backgroundColor: dow === 0 ? "rgba(239,68,68,0.07)" : "rgba(99,102,241,0.07)",
+                        backgroundColor: (dow === 0 || isHoliday) ? "rgba(239,68,68,0.07)" : "rgba(99,102,241,0.07)",
                       }} />
                   )}
                   <div className="absolute top-0 bottom-0 border-l border-gray-100/50 pointer-events-none"
