@@ -98,6 +98,13 @@ export default function LandingPage() {
     router.push(`/timeline/${tl.id}?edit=1`);
   }
 
+  // 편집 잠금이 유효한지 (20분 이내 갱신된 경우만 편집중으로 표시)
+  function isActivelyEditing(tl: TimelineMeta): boolean {
+    if (!tl.editingBy || !tl.editingSince) return false;
+    const elapsed = (Date.now() - new Date(tl.editingSince).getTime()) / 60000;
+    return elapsed < 20;
+  }
+
   const fmtDate = (iso: string) => {
     try { return new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }); }
     catch { return ""; }
@@ -203,11 +210,11 @@ export default function LandingPage() {
                       </svg>
                       조회
                     </span>
-                    {tl.editingBy && (
+                    {isActivelyEditing(tl) && (
                       <span className="text-[10px] font-medium text-orange-500 bg-orange-50 rounded-full px-2 py-0.5 flex items-center gap-1">
                         <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>
                         {(() => {
-                          const name = tl.editingBy.replace(/\s*\([^)]+\)$/, "").trim();
+                          const name = tl.editingBy!.replace(/\s*\([^)]+\)$/, "").trim();
                           const isSessionId = !name || /^usr-/.test(name);
                           return `${isSessionId ? "(이름없음)" : name} 편집중`;
                         })()}

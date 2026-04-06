@@ -200,9 +200,24 @@ export default function TimelinePage() {
       setDataLoaded(true);
     })();
 
+    // 브라우저 탭 종료 / 새로고침 시 잠금 해제 (sendBeacon 사용)
+    function handleUnload() {
+      if (!readOnly) releaseEditLock(id, sessionId);
+    }
+    // visibilitychange: 탭이 숨겨질 때도 갱신 중단, 다시 보이면 갱신 재개
+    function handleVisibility() {
+      if (document.visibilityState === "hidden" && !readOnly) {
+        releaseEditLock(id, sessionId);
+      }
+    }
+    window.addEventListener("beforeunload", handleUnload);
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       if (lockRenewRef.current) clearInterval(lockRenewRef.current);
       if (!readOnly) releaseEditLock(id, sessionId);
+      window.removeEventListener("beforeunload", handleUnload);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
