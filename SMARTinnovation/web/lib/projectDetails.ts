@@ -5,10 +5,21 @@ export interface CustomField {
   value: string;
 }
 
+export type TableRow = string[]; // 셀 값 배열
+
+export interface TableData {
+  headers: string[];   // 열 헤더
+  rows: TableRow[];    // 데이터 행
+}
+
+export function emptyTable(headers: string[]): TableData {
+  return { headers, rows: [Array(headers.length).fill("")] };
+}
+
 export interface ProjectDetailData {
   description: string;       // 프로젝트 개요
-  bom: string;               // BOM 정보
-  batchSize: string;         // 배치사이즈
+  bom: TableData;            // BOM 정보 (표)
+  batchSize: TableData;      // 배치사이즈 (표)
   targetProduct: string;     // 대상 제품
   customFields: CustomField[]; // 사용자 정의 필드
 }
@@ -23,8 +34,8 @@ export interface ProjectDetail {
 
 export const EMPTY_DETAIL_DATA: ProjectDetailData = {
   description: "",
-  bom: "",
-  batchSize: "",
+  bom: emptyTable(["품목", "규격", "수량", "비고"]),
+  batchSize: emptyTable(["제품명", "배치사이즈", "단위", "비고"]),
   targetProduct: "",
   customFields: [],
 };

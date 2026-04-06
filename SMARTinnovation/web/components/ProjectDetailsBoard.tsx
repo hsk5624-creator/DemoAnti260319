@@ -3,55 +3,186 @@
 import { useState, useEffect, useRef } from "react";
 import { Level1Item } from "@/lib/types";
 import {
-  ProjectDetail, ProjectDetailData, CustomField,
+  ProjectDetailData, TableData, emptyTable, CustomField,
   EMPTY_DETAIL_DATA,
   loadProjectDetails, saveProjectDetail,
 } from "@/lib/projectDetails";
 
 interface Props {
   timelineId: string;
-  items: Level1Item[];        // L1 항목 목록
+  items: Level1Item[];
   editMode: boolean;
-  focusLevel1Id?: string | null; // 타임라인에서 버튼 클릭 시 포커스할 L1 id
+  focusLevel1Id?: string | null;
   onFocusHandled?: () => void;
 }
 
-const FIELD_LABELS: { key: keyof Omit<ProjectDetailData, "customFields">; label: string; multiline?: boolean }[] = [
-  { key: "description",   label: "프로젝트 개요",  multiline: true },
-  { key: "targetProduct", label: "대상 제품" },
-  { key: "batchSize",     label: "배치사이즈" },
-  { key: "bom",           label: "BOM 정보", multiline: true },
-];
+/* ── 자유 편집 테이블 컴포넌트 ── */
+function EditableTable({
+  table, onChange, editMode,
+}: {
+  table: TableData;
+  onChange: (t: TableData) => void;
+  editMode: boolean;
+}) {
+  function setCell(ri: number, ci: number, val: string) {
+    const rows = table.rows.map((r, i) => i === ri ? r.map((c, j) => j === ci ? val : c) : r);
+    onChange({ ...table, rows });
+  }
+  function setHeader(ci: number, val: string) {
+    const headers = table.headers.map((h, i) => i === ci ? val : h);
+    onChange({ ...table, headers });
+  }
+  function addRow() {
+    onChange({ ...table, rows: [...table.rows, Array(table.headers.length).fill("")] });
+  }
+  function removeRow(ri: number) {
+    onChange({ ...table, rows: table.rows.filter((_, i) => i !== ri) });
+  }
+  function addCol() {
+    onChange({
+      headers: [...table.headers, ""],
+      rows: table.rows.map(r => [...r, ""]),
+    });
+  }
+  function removeCol(ci: number) {
+    onChange({
+      headers: table.headers.filter((_, i) => i !== ci),
+      rows: table.rows.map(r => r.filter((_, i) => i !== ci)),
+    });
+  }
 
+  const cellCls = "px-2 py-1.5 text-xs border-r border-gray-200 last:border-r-0 min-w-[80px]";
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="bg-gray-50">
+            {table.headers.map((h, ci) => (
+              <th key={ci} className={`${cellCls} font-semibold text-gray-600 text-left`}>
+                {editMode ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      value={h}
+                      onChange={e => setHeader(ci, e.target.value)}
+                      className="w-full bg-transparent outline-none font-semibold text-gray-700 placeholder-gray-300 min-w-[60px]"
+                      placeholder="열 이름"
+                    />
+                    {table.headers.length > 1 && (
+                      <button onClick={() => removeCol(ci)}
+                        className="text-gray-300 hover:text-red-400 shrink-0 transition-colors">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ) : h || <span className="text-gray-300">-</span>}
+              </th>
+            ))}
+            {editMode && (
+              <th className="px-2 py-1.5 w-8">
+                <button onClick={addCol}
+                  className="text-gray-300 hover:text-green-500 transition-colors"
+                  title="열 추가">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.length === 0 && (
+            <tr>
+              <td colSpan={table.headers.length + (editMode ? 1 : 0)}
+                className="text-center text-xs text-gray-300 py-4">
+                행이 없습니다
+              </td>
+            </tr>
+          )}
+          {table.rows.map((row, ri) => (
+            <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50/50">
+              {row.map((cell, ci) => (
+                <td key={ci} className={cellCls}>
+                  {editMode ? (
+                    <input
+                      value={cell}
+                      onChange={e => setCell(ri, ci, e.target.value)}
+                      className="w-full bg-transparent outline-none text-gray-800 placeholder-gray-200 min-w-[60px]"
+                      placeholder="입력"
+                    />
+                  ) : <span className="text-gray-800">{cell || <span className="text-gray-300">-</span>}</span>}
+                </td>
+              ))}
+              {editMode && (
+                <td className="px-2 py-1.5 w-8">
+                  <button onClick={() => removeRow(ri)}
+                    className="text-gray-200 hover:text-red-400 transition-colors"
+                    title="행 삭제">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {editMode && (
+        <button onClick={addRow}
+          className="w-full py-1.5 text-[11px] text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors border-t border-gray-100 flex items-center justify-center gap-1">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          행 추가
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── 메인 컴포넌트 ── */
 export default function ProjectDetailsBoard({
   timelineId, items, editMode, focusLevel1Id, onFocusHandled,
 }: Props) {
   const [detailsMap, setDetailsMap] = useState<Map<string, ProjectDetailData>>(new Map());
   const [openId,     setOpenId]     = useState<string | null>(null);
-  const [saving,     setSaving]     = useState<string | null>(null); // 저장 중인 l1 id
+  const [saving,     setSaving]     = useState<string | null>(null);
   const [drafts,     setDrafts]     = useState<Map<string, ProjectDetailData>>(new Map());
   const [tableError, setTableError] = useState(false);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  /* ── 데이터 로드 ── */
   useEffect(() => {
     if (!timelineId) return;
     loadProjectDetails(timelineId).then(list => {
-      if (list === null) { setTableError(true); return; }
+      if (!list) { setTableError(true); return; }
       const m = new Map<string, ProjectDetailData>();
-      list.forEach(d => m.set(d.level1Id, d.data));
+      list.forEach(d => {
+        // 구버전 string 데이터 마이그레이션
+        const data = d.data as unknown as Record<string, unknown>;
+        m.set(d.level1Id, {
+          ...EMPTY_DETAIL_DATA,
+          ...data,
+          bom:       (typeof data.bom === "object" && data.bom !== null && "headers" in data.bom)
+                       ? data.bom as TableData
+                       : emptyTable(["품목", "규격", "수량", "비고"]),
+          batchSize: (typeof data.batchSize === "object" && data.batchSize !== null && "headers" in data.batchSize)
+                       ? data.batchSize as TableData
+                       : emptyTable(["제품명", "배치사이즈", "단위", "비고"]),
+        });
+      });
       setDetailsMap(m);
     });
   }, [timelineId]);
 
-  /* ── 타임라인에서 포커스 요청 처리 ── */
   useEffect(() => {
     if (!focusLevel1Id) return;
     setOpenId(focusLevel1Id);
-    // 약간 딜레이 후 스크롤
     setTimeout(() => {
-      const el = cardRefs.current.get(focusLevel1Id);
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      cardRefs.current.get(focusLevel1Id)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 80);
     onFocusHandled?.();
   }, [focusLevel1Id, onFocusHandled]);
@@ -60,11 +191,11 @@ export default function ProjectDetailsBoard({
     return drafts.get(id) ?? detailsMap.get(id) ?? { ...EMPTY_DETAIL_DATA };
   }
 
-  function startEdit(id: string) {
+  function startDraft(id: string) {
     if (!drafts.has(id)) {
-      setDrafts(prev => new Map(prev).set(id, { ...getDetail(id), customFields: [...(getDetail(id).customFields ?? [])] }));
+      const d = getDetail(id);
+      setDrafts(prev => new Map(prev).set(id, JSON.parse(JSON.stringify(d))));
     }
-    setOpenId(id);
   }
 
   function updateDraft(id: string, patch: Partial<ProjectDetailData>) {
@@ -76,34 +207,24 @@ export default function ProjectDetailsBoard({
   }
 
   function updateCustomField(id: string, idx: number, field: Partial<CustomField>) {
-    setDrafts(prev => {
-      const m = new Map(prev);
-      const d = { ...(m.get(id) ?? { ...EMPTY_DETAIL_DATA }) };
-      const cf = [...(d.customFields ?? [])];
-      cf[idx] = { ...cf[idx], ...field };
-      m.set(id, { ...d, customFields: cf });
-      return m;
-    });
+    const d = getDetail(id);
+    const cf = [...(d.customFields ?? [])];
+    cf[idx] = { ...cf[idx], ...field };
+    startDraft(id);
+    updateDraft(id, { customFields: cf });
   }
 
   function addCustomField(id: string) {
-    setDrafts(prev => {
-      const m = new Map(prev);
-      const d = { ...(m.get(id) ?? { ...EMPTY_DETAIL_DATA }) };
-      m.set(id, { ...d, customFields: [...(d.customFields ?? []), { key: "", value: "" }] });
-      return m;
-    });
+    startDraft(id);
+    const cf = [...(getDetail(id).customFields ?? []), { key: "", value: "" }];
+    updateDraft(id, { customFields: cf });
   }
 
   function removeCustomField(id: string, idx: number) {
-    setDrafts(prev => {
-      const m = new Map(prev);
-      const d = { ...(m.get(id) ?? { ...EMPTY_DETAIL_DATA }) };
-      const cf = [...(d.customFields ?? [])];
-      cf.splice(idx, 1);
-      m.set(id, { ...d, customFields: cf });
-      return m;
-    });
+    startDraft(id);
+    const cf = [...(getDetail(id).customFields ?? [])];
+    cf.splice(idx, 1);
+    updateDraft(id, { customFields: cf });
   }
 
   async function handleSave(id: string) {
@@ -123,14 +244,15 @@ export default function ProjectDetailsBoard({
   const hasFilled = (id: string) => {
     const d = detailsMap.get(id);
     if (!d) return false;
-    return d.description || d.bom || d.batchSize || d.targetProduct || (d.customFields?.length ?? 0) > 0;
+    const bomHasData = d.bom?.rows?.some(r => r.some(c => c.trim()));
+    const bsHasData  = d.batchSize?.rows?.some(r => r.some(c => c.trim()));
+    return d.description || d.targetProduct || bomHasData || bsHasData || (d.customFields?.length ?? 0) > 0;
   };
 
   if (tableError) {
     return (
       <div className="p-8 text-center text-gray-500 text-sm">
         <p className="font-semibold text-red-500 mb-2">project_details 테이블이 없습니다.</p>
-        <p>Supabase에서 아래 SQL을 실행해주세요:</p>
         <pre className="mt-3 text-left bg-gray-100 rounded-xl p-4 text-xs overflow-auto inline-block">
 {`create table project_details (
   id           serial primary key,
@@ -163,7 +285,6 @@ export default function ProjectDetailsBoard({
         const isOpen  = openId === item.id;
         const isDraft = drafts.has(item.id);
         const detail  = getDetail(item.id);
-        const filled  = hasFilled(item.id);
 
         return (
           <div
@@ -181,14 +302,13 @@ export default function ProjectDetailsBoard({
             >
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
               <span className="flex-1 font-semibold text-sm text-gray-900">{item.name}</span>
-              {filled && !isDraft && (
+              {hasFilled(item.id) && !isDraft && (
                 <span className="text-[10px] bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">입력됨</span>
               )}
               {isDraft && (
                 <span className="text-[10px] bg-amber-100 text-amber-700 font-semibold px-2 py-0.5 rounded-full">수정 중</span>
               )}
-              <svg
-                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
                 className={`text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
@@ -196,75 +316,91 @@ export default function ProjectDetailsBoard({
 
             {/* 상세 패널 */}
             {isOpen && (
-              <div className="px-5 pb-5 border-t border-gray-100">
-                {/* 기본 필드 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {FIELD_LABELS.map(({ key, label, multiline }) => (
-                    <div key={key} className={multiline ? "md:col-span-2" : ""}>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">{label}</label>
-                      {editMode ? (
-                        multiline ? (
-                          <textarea
-                            rows={3}
-                            value={(isDraft ? (drafts.get(item.id) ?? detail) : detail)[key] as string}
-                            onChange={e => { if (!isDraft) startEdit(item.id); updateDraft(item.id, { [key]: e.target.value }); }}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200"
-                            placeholder={`${label} 입력`}
-                          />
-                        ) : (
-                          <input
-                            type="text"
-                            value={(isDraft ? (drafts.get(item.id) ?? detail) : detail)[key] as string}
-                            onChange={e => { if (!isDraft) startEdit(item.id); updateDraft(item.id, { [key]: e.target.value }); }}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200"
-                            placeholder={`${label} 입력`}
-                          />
-                        )
-                      ) : (
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap min-h-[2rem] bg-gray-50 rounded-lg px-3 py-2">
-                          {detail[key] as string || <span className="text-gray-400 text-xs">-</span>}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+              <div className="px-5 pb-5 border-t border-gray-100 space-y-5 mt-4">
+
+                {/* 프로젝트 개요 */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">프로젝트 개요</label>
+                  {editMode ? (
+                    <textarea rows={3}
+                      value={detail.description}
+                      onChange={e => { startDraft(item.id); updateDraft(item.id, { description: e.target.value }); }}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200"
+                      placeholder="프로젝트 개요 입력" />
+                  ) : (
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap min-h-[2rem] bg-gray-50 rounded-lg px-3 py-2">
+                      {detail.description || <span className="text-gray-300 text-xs">-</span>}
+                    </p>
+                  )}
                 </div>
 
-                {/* 사용자 정의 필드 */}
-                {(detail.customFields?.length > 0 || editMode) && (
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-semibold text-gray-500">추가 항목</span>
-                      {editMode && (
-                        <button
-                          onClick={() => { if (!isDraft) startEdit(item.id); addCustomField(item.id); }}
-                          className="text-[11px] text-green-600 hover:text-green-800 font-semibold flex items-center gap-0.5">
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                          </svg>
-                          항목 추가
-                        </button>
-                      )}
-                    </div>
+                {/* 대상 제품 */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">대상 제품</label>
+                  {editMode ? (
+                    <input type="text"
+                      value={detail.targetProduct}
+                      onChange={e => { startDraft(item.id); updateDraft(item.id, { targetProduct: e.target.value }); }}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200"
+                      placeholder="대상 제품 입력" />
+                  ) : (
+                    <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">
+                      {detail.targetProduct || <span className="text-gray-300 text-xs">-</span>}
+                    </p>
+                  )}
+                </div>
+
+                {/* 배치사이즈 표 */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">배치사이즈</label>
+                  <EditableTable
+                    table={detail.batchSize ?? emptyTable(["제품명", "배치사이즈", "단위", "비고"])}
+                    editMode={editMode}
+                    onChange={t => { startDraft(item.id); updateDraft(item.id, { batchSize: t }); }}
+                  />
+                </div>
+
+                {/* BOM 표 */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">BOM 정보</label>
+                  <EditableTable
+                    table={detail.bom ?? emptyTable(["품목", "규격", "수량", "비고"])}
+                    editMode={editMode}
+                    onChange={t => { startDraft(item.id); updateDraft(item.id, { bom: t }); }}
+                  />
+                </div>
+
+                {/* 추가 항목 */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-semibold text-gray-500">추가 항목</span>
+                    {editMode && (
+                      <button onClick={() => addCustomField(item.id)}
+                        className="text-[11px] text-green-600 hover:text-green-800 font-semibold flex items-center gap-0.5">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        항목 추가
+                      </button>
+                    )}
+                  </div>
+                  {(detail.customFields?.length ?? 0) === 0 && !editMode ? (
+                    <p className="text-xs text-gray-300">-</p>
+                  ) : (
                     <div className="space-y-2">
-                      {(isDraft ? (drafts.get(item.id)?.customFields ?? []) : detail.customFields ?? []).map((cf, idx) => (
+                      {(detail.customFields ?? []).map((cf, idx) => (
                         <div key={idx} className="flex gap-2 items-start">
                           {editMode ? (
                             <>
-                              <input
-                                type="text"
-                                value={cf.key}
-                                onChange={e => { if (!isDraft) startEdit(item.id); updateCustomField(item.id, idx, { key: e.target.value }); }}
+                              <input type="text" value={cf.key}
+                                onChange={e => updateCustomField(item.id, idx, { key: e.target.value })}
                                 placeholder="항목명"
-                                className="w-32 shrink-0 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-green-400"
-                              />
-                              <input
-                                type="text"
-                                value={cf.value}
-                                onChange={e => { if (!isDraft) startEdit(item.id); updateCustomField(item.id, idx, { value: e.target.value }); }}
+                                className="w-32 shrink-0 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-green-400" />
+                              <input type="text" value={cf.value}
+                                onChange={e => updateCustomField(item.id, idx, { value: e.target.value })}
                                 placeholder="값"
-                                className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-green-400"
-                              />
-                              <button onClick={() => { if (!isDraft) startEdit(item.id); removeCustomField(item.id, idx); }}
+                                className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-green-400" />
+                              <button onClick={() => removeCustomField(item.id, idx)}
                                 className="text-gray-300 hover:text-red-400 transition-colors mt-1.5">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -280,31 +416,21 @@ export default function ProjectDetailsBoard({
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* 저장/취소 */}
                 {editMode && isDraft && (
-                  <div className="flex gap-2 mt-4">
-                    <button
-                      onClick={() => handleSave(item.id)}
-                      disabled={saving === item.id}
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => handleSave(item.id)} disabled={saving === item.id}
                       className="px-4 py-2 rounded-xl bg-[#00733C] text-white text-xs font-bold hover:bg-[#005a2e] transition-colors disabled:opacity-50">
                       {saving === item.id ? "저장 중..." : "저장"}
                     </button>
-                    <button
-                      onClick={() => handleDiscard(item.id)}
+                    <button onClick={() => handleDiscard(item.id)}
                       className="px-4 py-2 rounded-xl border border-gray-200 text-gray-500 text-xs font-medium hover:bg-gray-50 transition-colors">
                       취소
                     </button>
                   </div>
-                )}
-
-                {/* 최종 수정 정보 (읽기 전용) */}
-                {!editMode && !isDraft && (
-                  <p className="text-[10px] text-gray-300 mt-3 text-right">
-                    {detailsMap.get(item.id) ? "저장된 정보" : "아직 입력된 정보가 없습니다"}
-                  </p>
                 )}
               </div>
             )}
