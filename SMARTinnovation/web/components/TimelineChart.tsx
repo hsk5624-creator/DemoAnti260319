@@ -801,9 +801,11 @@ export default function TimelineChart({
                       {/* 전체 선택/해제 */}
                       <div className="px-3 py-1.5 flex items-center justify-between">
                         <button
-                          onClick={() => setFilterAssignees(new Set())}
+                          onClick={() => setFilterAssignees(prev =>
+                            prev.size === 0 ? new Set(allAssignees) : new Set()
+                          )}
                           className="text-[10px] text-blue-500 hover:text-blue-700 font-semibold">
-                          전체 선택
+                          {filterAssignees.size === 0 ? "전체 선택 취소" : "전체 선택"}
                         </button>
                         {filterAssignees.size > 0 && (
                           <button
