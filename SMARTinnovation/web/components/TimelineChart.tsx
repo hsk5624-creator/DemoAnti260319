@@ -123,7 +123,7 @@ export default function TimelineChart({
   const [skipWeekends,   setSkipWeekends]   = useState(false);
   const [viewMode,       setViewMode]       = useState<ViewMode>("week");
   const [sortAssignee,       setSortAssignee]       = useState<"none" | "asc" | "desc">("none");
-  const [filterAssignees,    setFilterAssignees]    = useState<Set<string>>(new Set()); // 비어있으면 전체
+  const [filterAssignees,    setFilterAssignees]    = useState<Set<string> | null>(null); // null=전체, Set=명시 선택
   const [assigneeSearch,     setAssigneeSearch]     = useState("");
   const [assigneeDropOpen,   setAssigneeDropOpen]   = useState(false);
   const assigneeDropRef = useRef<HTMLDivElement>(null);
@@ -732,7 +732,7 @@ export default function TimelineChart({
               const allAssignees = Array.from(new Set(
                 items.flatMap(l1 => l1.children.map(l2 => l2.assignee || "(미지정)"))
               )).sort((a, b) => a.localeCompare(b, "ko"));
-              const isActive = filterAssignees.size > 0 || sortAssignee !== "none";
+              const isActive = filterAssignees !== null || sortAssignee !== "none";
               const filtered = allAssignees.filter(a =>
                 !assigneeSearch || a.includes(assigneeSearch)
               );
@@ -748,7 +748,7 @@ export default function TimelineChart({
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M6 12h12M9 17h6" />
                     </svg>
                     담당자
-                    {filterAssignees.size > 0 && <span className="ml-0.5">({filterAssignees.size})</span>}
+                    {filterAssignees !== null && <span className="ml-0.5">({filterAssignees.size})</span>}
                     {sortAssignee !== "none" && <span className="ml-0.5">{sortAssignee === "asc" ? "↑" : "↓"}</span>}
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
                       className={`transition-transform ${assigneeDropOpen ? "rotate-180" : ""}`}>
@@ -802,14 +802,14 @@ export default function TimelineChart({
                       <div className="px-3 py-1.5 flex items-center justify-between">
                         <button
                           onClick={() => setFilterAssignees(prev =>
-                            prev.size === 0 ? new Set(allAssignees) : new Set()
+                            prev === null ? new Set() : null
                           )}
                           className="text-[10px] text-blue-500 hover:text-blue-700 font-semibold">
-                          {filterAssignees.size === 0 ? "전체 선택 취소" : "전체 선택"}
+                          {filterAssignees === null ? "전체 선택 취소" : "전체 선택"}
                         </button>
-                        {filterAssignees.size > 0 && (
+                        {filterAssignees !== null && (
                           <button
-                            onClick={() => { setFilterAssignees(new Set()); setSortAssignee("none"); setAssigneeDropOpen(false); }}
+                            onClick={() => { setFilterAssignees(null); setSortAssignee("none"); setAssigneeDropOpen(false); }}
                             className="text-[10px] text-gray-400 hover:text-red-500 font-semibold">
                             초기화
                           </button>
@@ -822,17 +822,17 @@ export default function TimelineChart({
                           <p className="text-center text-xs text-gray-300 py-3">결과 없음</p>
                         )}
                         {filtered.map(name => {
-                          const checked = filterAssignees.size === 0 || filterAssignees.has(name);
+                          const checked = filterAssignees === null || filterAssignees.has(name);
                           return (
                             <label key={name}
                               className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
                               <input type="checkbox" checked={checked}
                                 onChange={() => {
                                   setFilterAssignees(prev => {
-                                    const next = new Set(prev.size === 0 ? allAssignees : prev);
+                                    const next = new Set(prev === null ? allAssignees : prev);
                                     if (next.has(name)) next.delete(name); else next.add(name);
-                                    // 전부 선택이면 필터 해제
-                                    if (next.size === allAssignees.length) return new Set();
+                                    // 전부 선택이면 null(필터 없음)로 복귀
+                                    if (next.size === allAssignees.length) return null;
                                     return next;
                                   });
                                 }}
@@ -1027,7 +1027,7 @@ export default function TimelineChart({
             {items.map(item => ({
               ...item,
               children: item.children
-                .filter(l2 => filterAssignees.size === 0 || filterAssignees.has(l2.assignee || "(미지정)"))
+                .filter(l2 => filterAssignees === null || filterAssignees.has(l2.assignee || "(미지정)"))
                 .sort((a, b) => sortAssignee === "none" ? 0
                   : (sortAssignee === "asc" ? 1 : -1) * a.assignee.localeCompare(b.assignee, "ko")),
             })).map((item, itemIdx) => {
