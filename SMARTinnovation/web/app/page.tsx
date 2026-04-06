@@ -8,7 +8,7 @@ import {
 } from "@/lib/timelines";
 import {
   isLandingAuthed, setLandingAuthed, isEditAuthed, setEditAuthed,
-  checkTimelineEditPassword,
+  checkTimelineEditPassword, getEditorName, setEditorName,
 } from "@/lib/auth";
 import PasswordModal from "@/components/PasswordModal";
 
@@ -90,8 +90,9 @@ export default function LandingPage() {
     }
   }
 
-  function handleEditPwSuccess() {
+  function handleEditPwSuccess(editorName?: string) {
     setEditAuthed();
+    if (editorName) setEditorName(editorName);
     const tl = editPwTarget!;
     setEditPwTarget(null);
     router.push(`/timeline/${tl.id}?edit=1`);
@@ -327,6 +328,8 @@ export default function LandingPage() {
           title="편집 모드 진입"
           description={`"${editPwTarget.name}" 편집 권한을 확인합니다`}
           showCancel
+          showName
+          defaultName={getEditorName()}
           checkFn={pw => checkTimelineEditPassword(pw, editPwTarget.editPassword)}
           onSuccess={handleEditPwSuccess}
           onCancel={() => setEditPwTarget(null)}

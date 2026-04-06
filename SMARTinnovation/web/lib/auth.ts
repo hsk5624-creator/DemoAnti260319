@@ -1,7 +1,8 @@
 export const CORRECT_PASSWORD = "cell123!hs";
 
-const SESSION_KEY = "si-authed";
-const EDIT_KEY    = "si-edit-authed";
+const SESSION_KEY   = "si-authed";
+const EDIT_KEY      = "si-edit-authed";
+const EDITOR_NAME_KEY = "si-editor-name";
 
 export function checkPassword(pw: string): boolean {
   return pw === CORRECT_PASSWORD;
@@ -29,4 +30,14 @@ export function isEditAuthed(): boolean {
 
 export function setEditAuthed(): void {
   sessionStorage.setItem(EDIT_KEY, "1");
+}
+
+/** 편집자 이름 저장/조회 */
+export function getEditorName(): string {
+  if (typeof window === "undefined") return "";
+  return sessionStorage.getItem(EDITOR_NAME_KEY) ?? "";
+}
+
+export function setEditorName(name: string): void {
+  sessionStorage.setItem(EDITOR_NAME_KEY, name);
 }

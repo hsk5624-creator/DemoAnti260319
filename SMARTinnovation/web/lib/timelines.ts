@@ -70,7 +70,8 @@ const LOCK_TIMEOUT_MIN = 30;
 
 export async function acquireEditLock(
   timelineId: string,
-  sessionId: string
+  sessionId: string,
+  editorName?: string,
 ): Promise<{ ok: boolean; editingBy?: string }> {
   const { data } = await supabase
     .from("timelines")
@@ -78,15 +79,24 @@ export async function acquireEditLock(
     .eq("id", timelineId)
     .single();
 
-  if (data?.editing_by && data.editing_by !== sessionId) {
+  // editing_by 형식: "이름 (sessionId)" 또는 레거시 "sessionId"
+  const storedSessionId = data?.editing_by
+    ? (data.editing_by.match(/\(([^)]+)\)$/) ?? [null, data.editing_by])[1]
+    : null;
+
+  if (data && storedSessionId && storedSessionId !== sessionId) {
     const elapsed = (Date.now() - new Date(data.editing_since).getTime()) / 60000;
     if (elapsed < LOCK_TIMEOUT_MIN) {
       return { ok: false, editingBy: data.editing_by };
     }
   }
 
+  const editingByValue = editorName?.trim()
+    ? `${editorName.trim()} (${sessionId})`
+    : sessionId;
+
   await supabase.from("timelines").update({
-    editing_by:    sessionId,
+    editing_by:    editingByValue,
     editing_since: new Date().toISOString(),
   }).eq("id", timelineId);
 

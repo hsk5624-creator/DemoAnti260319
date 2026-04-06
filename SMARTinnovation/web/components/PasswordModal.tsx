@@ -6,10 +6,12 @@ import { checkPassword } from "@/lib/auth";
 interface Props {
   title?: string;
   description?: string;
-  onSuccess: () => void;
+  onSuccess: (editorName?: string) => void;
   onCancel?: () => void;
   showCancel?: boolean;
-  checkFn?: (pw: string) => boolean; // 커스텀 비밀번호 검증 함수 (없으면 전역 비밀번호 사용)
+  showName?: boolean;        // 편집자 이름 입력 필드 표시 여부
+  defaultName?: string;      // 이전에 입력한 이름 기본값
+  checkFn?: (pw: string) => boolean;
 }
 
 export default function PasswordModal({
@@ -18,20 +20,31 @@ export default function PasswordModal({
   onSuccess,
   onCancel,
   showCancel = false,
+  showName = false,
+  defaultName = "",
   checkFn,
 }: Props) {
-  const [pw, setPw]         = useState("");
-  const [error, setError]   = useState(false);
-  const [shake, setShake]   = useState(false);
+  const [pw,    setPw]    = useState("");
+  const [name,  setName]  = useState(defaultName);
+  const [error, setError] = useState(false);
+  const [shake, setShake] = useState(false);
+  const nameRef  = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => {
+    // 이름 필드가 있으면 이름부터, 없으면 비밀번호부터 포커스
+    if (showName && !defaultName) {
+      nameRef.current?.focus();
+    } else {
+      inputRef.current?.focus();
+    }
+  }, []);
 
   function handleSubmit() {
     const verify = checkFn ?? checkPassword;
     if (verify(pw)) {
       setError(false);
-      onSuccess();
+      onSuccess(showName ? name.trim() : undefined);
     } else {
       setError(true);
       setShake(true);
@@ -57,23 +70,45 @@ export default function PasswordModal({
           <p className="text-xs text-gray-500 text-center mb-4">{description}</p>
         )}
 
-        <input
-          ref={inputRef}
-          type="password"
-          placeholder="비밀번호"
-          value={pw}
-          onChange={e => { setPw(e.target.value); setError(false); }}
-          onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
-          className={`w-full mt-4 border rounded-xl px-3 py-2.5 text-sm outline-none transition-colors
-            ${error
-              ? "border-red-400 bg-red-50 focus:ring-1 focus:ring-red-300"
-              : "border-gray-200 focus:border-green-400 focus:ring-1 focus:ring-green-200"}`}
-        />
+        {/* 편집자 이름 */}
+        {showName && (
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-gray-500 mb-1">편집자 이름</label>
+            <input
+              ref={nameRef}
+              type="text"
+              placeholder="이름을 입력하세요"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") inputRef.current?.focus(); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200"
+            />
+          </div>
+        )}
+
+        {/* 비밀번호 */}
+        <div className={showName ? "mt-3" : "mt-4"}>
+          {showName && (
+            <label className="block text-xs font-medium text-gray-500 mb-1">편집 비밀번호</label>
+          )}
+          <input
+            ref={inputRef}
+            type="password"
+            placeholder="비밀번호"
+            value={pw}
+            onChange={e => { setPw(e.target.value); setError(false); }}
+            onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+            className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-colors
+              ${error
+                ? "border-red-400 bg-red-50 focus:ring-1 focus:ring-red-300"
+                : "border-gray-200 focus:border-green-400 focus:ring-1 focus:ring-green-200"}`}
+          />
+        </div>
         {error && (
           <p className="text-xs text-red-500 mt-1.5 text-center">비밀번호가 올바르지 않습니다</p>
         )}
 
-        <div className={`mt-4 flex gap-2 ${showCancel ? "" : ""}`}>
+        <div className="mt-4 flex gap-2">
           {showCancel && onCancel && (
             <button
               onClick={onCancel}

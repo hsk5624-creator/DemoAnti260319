@@ -14,6 +14,7 @@ import {
 } from "@/lib/timelines";
 import SuggestionsBoard from "@/components/SuggestionsBoard";
 import ProjectDetailsBoard from "@/components/ProjectDetailsBoard";
+import { getEditorName } from "@/lib/auth";
 
 const C = CATEGORY_COLORS;
 const g = generateId;
@@ -153,7 +154,8 @@ export default function TimelinePage() {
   const [changePwErr,  setChangePwErr]  = useState("");
 
   // 편집 잠금 상태
-  const [lockBlocked, setLockBlocked] = useState(false);
+  const [lockBlocked,  setLockBlocked]  = useState(false);
+  const [lockEditingBy, setLockEditingBy] = useState<string>("");
   const sessionId = typeof window !== "undefined" ? getSessionId() : "";
   const lockRenewRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -170,9 +172,10 @@ export default function TimelinePage() {
 
       // 편집 모드면 잠금 획득 시도
       if (!readOnly) {
-        const result = await acquireEditLock(id, sessionId);
+        const result = await acquireEditLock(id, sessionId, getEditorName());
         if (!result.ok) {
           setLockBlocked(true);
+          setLockEditingBy(result.editingBy ?? "");
           return;
         }
         // 15분마다 잠금 갱신
@@ -540,7 +543,12 @@ export default function TimelinePage() {
             </svg>
           </div>
           <h2 className="text-base font-bold text-gray-900 mb-2">편집 중인 사용자가 있습니다</h2>
-          <p className="text-sm text-gray-500 mb-5">다른 사용자가 이 타임라인을 편집 중입니다.<br/>잠시 후 다시 시도하거나 조회 모드로 접속하세요.</p>
+          {lockEditingBy && (
+            <p className="text-sm font-semibold text-orange-500 mb-1">
+              {lockEditingBy.replace(/\s*\([^)]+\)$/, "")}
+            </p>
+          )}
+          <p className="text-sm text-gray-500 mb-5">위 사용자가 이 타임라인을 편집 중입니다.<br/>잠시 후 다시 시도하거나 조회 모드로 접속하세요.</p>
           <div className="flex gap-2">
             <button onClick={() => router.push("/")}
               className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 font-medium">홈으로</button>
@@ -616,7 +624,12 @@ export default function TimelinePage() {
               <p className="text-green-200 text-xs">프로젝트 타임라인 관리 시스템</p>
               {readOnly
                 ? <span className="text-[10px] font-semibold bg-white/20 text-green-100 rounded-full px-2 py-0.5">조회 모드</span>
-                : <span className="text-[10px] font-semibold bg-indigo-500/80 text-white rounded-full px-2 py-0.5">편집 모드</span>
+                : <>
+                    <span className="text-[10px] font-semibold bg-indigo-500/80 text-white rounded-full px-2 py-0.5">편집 모드</span>
+                    {getEditorName() && (
+                      <span className="text-[10px] text-indigo-200 font-medium">{getEditorName()} 편집 중</span>
+                    )}
+                  </>
               }
             </div>
           </div>
