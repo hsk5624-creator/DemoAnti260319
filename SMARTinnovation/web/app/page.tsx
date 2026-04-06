@@ -204,7 +204,10 @@ export default function LandingPage() {
                       조회
                     </span>
                     {tl.editingBy && (
-                      <span className="text-[10px] font-medium text-orange-500 bg-orange-50 rounded-full px-2 py-0.5">편집 중</span>
+                      <span className="text-[10px] font-medium text-orange-500 bg-orange-50 rounded-full px-2 py-0.5 flex items-center gap-1">
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>
+                        {tl.editingBy.replace(/\s*\([^)]+\)$/, "") || "편집 중"}
+                      </span>
                     )}
                     {tl.editPassword && (
                       <span className="text-[10px] font-medium text-indigo-400 bg-indigo-50 rounded-full px-2 py-0.5 flex items-center gap-1">
