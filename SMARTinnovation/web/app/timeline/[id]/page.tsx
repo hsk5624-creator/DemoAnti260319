@@ -13,6 +13,7 @@ import {
   getSessionId, LEGACY_TIMELINE_ID,
 } from "@/lib/timelines";
 import SuggestionsBoard from "@/components/SuggestionsBoard";
+import ProjectDetailsBoard from "@/components/ProjectDetailsBoard";
 
 const C = CATEGORY_COLORS;
 const g = generateId;
@@ -138,7 +139,8 @@ export default function TimelinePage() {
   const readOnly     = searchParams.get("edit") !== "1";
 
   // 탭 상태
-  const [activeTab, setActiveTab] = useState<"timeline" | "suggestions">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "details" | "suggestions">("timeline");
+  const [focusDetailL1, setFocusDetailL1] = useState<string | null>(null);
 
   const [timelineName, setTimelineName] = useState("");
   const [editingName, setEditingName]   = useState(false);
@@ -635,7 +637,7 @@ export default function TimelinePage() {
 
         {/* 탭 네비게이션 */}
         <div className="flex border-t border-green-700 px-5">
-          {(["timeline", "suggestions"] as const).map(tab => (
+          {(["timeline", "details", "suggestions"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -643,7 +645,7 @@ export default function TimelinePage() {
                 ${activeTab === tab
                   ? "border-white text-white"
                   : "border-transparent text-green-300 hover:text-white"}`}>
-              {tab === "timeline" ? "타임라인" : "개선제안"}
+              {tab === "timeline" ? "타임라인" : tab === "details" ? "프로젝트 상세" : "개선제안"}
             </button>
           ))}
         </div>
@@ -685,6 +687,14 @@ export default function TimelinePage() {
       {/* 탭 콘텐츠 */}
       {activeTab === "suggestions" ? (
         <SuggestionsBoard timelineId={id} editMode={!readOnly} />
+      ) : activeTab === "details" ? (
+        <ProjectDetailsBoard
+          timelineId={id}
+          items={items}
+          editMode={!readOnly}
+          focusLevel1Id={focusDetailL1}
+          onFocusHandled={() => setFocusDetailL1(null)}
+        />
       ) : (
         <main className="w-full px-4 py-4">
           <div className={`grid gap-4 items-start ${readOnly ? "" : "grid-cols-1 lg:grid-cols-[300px_1fr]"}`}>
@@ -696,6 +706,7 @@ export default function TimelinePage() {
             )}
             <TimelineChart
               items={items}
+              onViewDetail={l1Id => { setFocusDetailL1(l1Id); setActiveTab("details"); }}
               {...(!readOnly && {
                 onEditLevel2:        handleEditLevel2,
                 onEditLevel1Phases:  handleEditLevel1Phases,

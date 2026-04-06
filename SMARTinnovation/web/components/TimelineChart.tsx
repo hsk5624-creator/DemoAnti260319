@@ -33,6 +33,7 @@ interface Props {
   onMergeL3?: (l2Id: string, srcRowId: string, targetRowId: string) => void;
   onUnmergeL3?: (l2Id: string, l3Id: string) => void;
   onUpdateL3RowLabel?: (l2Id: string, rowId: string, label: string) => void;
+  onViewDetail?: (level1Id: string) => void;
 }
 
 const WEEK_W      = 20;   // px per week  (1month = 4 × WEEK_W = 80px)
@@ -96,6 +97,7 @@ export default function TimelineChart({
   onMergeL3,
   onUnmergeL3,
   onUpdateL3RowLabel,
+  onViewDetail,
 }: Props) {
   const [expanded,      setExpanded]      = useState<Set<string>>(new Set());
   const [expandedL2,    setExpandedL2]    = useState<Set<string>>(new Set());
@@ -994,6 +996,18 @@ export default function TimelineChart({
                           title="그룹 과제 수정">
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      )}
+                      {/* 상세정보 버튼 */}
+                      {onViewDetail && (
+                        <button
+                          onClick={e => { e.stopPropagation(); onViewDetail(item.id); }}
+                          className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md hover:bg-black/10 text-gray-400 hover:text-blue-500 transition-all shrink-0"
+                          title="프로젝트 상세정보">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                            <circle cx="12" cy="12" r="10" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8h.01M12 12v4" />
                           </svg>
                         </button>
                       )}
