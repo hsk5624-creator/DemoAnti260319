@@ -905,11 +905,11 @@ export default function TimelineChart({
           className="overflow-x-auto overflow-y-hidden border-b border-gray-100"
           style={{ height: 14 }}
         >
-          <div style={{ minWidth: labelW + totalWidth, height: 1 }} />
+          <div style={{ minWidth: labelW + totalWidth, height: 1, transition: "min-width 0.3s ease" }} />
         </div>
 
         <div ref={scrollRef} onScroll={onMainScroll} className="overflow-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
-          <div style={{ minWidth: labelW + totalWidth }}>
+          <div style={{ minWidth: labelW + totalWidth, transition: "min-width 0.3s ease" }}>
 
             {/* ━━━ 헤더 ━━━ */}
             <div className="flex sticky top-0 z-30 shadow-sm">
@@ -929,8 +929,8 @@ export default function TimelineChart({
                 <div className="flex border-b border-gray-700">
                   {yearLayout.map(yg => (
                     <div key={yg.year}
-                      style={{ width: yg.width }}
-                      className="text-center text-[15px] font-bold text-white py-1.5 border-r border-gray-600 last:border-r-0 tracking-wider">
+                      style={{ width: yg.width, transition: "width 0.3s ease" }}
+                      className="text-center text-[15px] font-bold text-white py-1.5 border-r border-gray-600 last:border-r-0 tracking-wider overflow-hidden">
                       {yg.year}
                     </div>
                   ))}
@@ -951,10 +951,10 @@ export default function TimelineChart({
                   <div className={`flex${anyExpanded ? " border-b border-gray-700" : ""}`}>
                     {monthLayout.map((mg, i) => (
                       <div key={i}
-                        style={{ width: mg.width }}
+                        style={{ width: mg.width, transition: "width 0.3s ease" }}
                         onClick={() => viewMode === "week" && toggleMonth(mg.year, mg.month)}
                         title={viewMode === "week" ? (mg.expanded ? "클릭하여 주 단위로 축소" : "클릭하여 일 단위로 펼치기") : undefined}
-                        className={`text-center py-1.5 border-r border-gray-700 last:border-r-0 select-none
+                        className={`text-center py-1.5 border-r border-gray-700 last:border-r-0 select-none overflow-hidden
                           ${viewMode === "week" ? "cursor-pointer transition-colors hover:bg-gray-700" : "cursor-default"}
                           ${mg.month === 1
                             ? "text-[13px] font-extrabold text-green-300"
@@ -970,11 +970,11 @@ export default function TimelineChart({
                   <div className="flex border-b border-gray-700">
                     {monthLayout.map((mg, i) => {
                       if (mg.expanded) {
-                        return <div key={i} style={{ width: mg.width }} className="border-r border-gray-700 last:border-r-0" />;
+                        return <div key={i} style={{ width: mg.width, transition: "width 0.3s ease" }} className="border-r border-gray-700 last:border-r-0 overflow-hidden" />;
                       }
                       const weeks = mg.count ?? 4;
                       return (
-                        <div key={i} style={{ width: mg.width }} className="flex border-r border-gray-700 last:border-r-0">
+                        <div key={i} style={{ width: mg.width, transition: "width 0.3s ease" }} className="flex border-r border-gray-700 last:border-r-0 overflow-hidden">
                           {Array.from({ length: weeks }, (_, w) => (
                             <div key={w}
                               style={{ width: WEEK_W, minWidth: WEEK_W }}
@@ -992,7 +992,7 @@ export default function TimelineChart({
                   <div className="flex">
                     {monthLayout.map((mg, i) => {
                       if (!mg.expanded) {
-                        return <div key={i} style={{ width: mg.width }} className="border-r border-gray-700 last:border-r-0" />;
+                        return <div key={i} style={{ width: mg.width, transition: "width 0.3s ease" }} className="border-r border-gray-700 last:border-r-0 overflow-hidden" />;
                       }
                       const days = new Date(mg.year, mg.month, 0).getDate();
                       const holidays = getMonthHolidays(mg.year, mg.month);
@@ -1742,7 +1742,7 @@ function MonthGrid({ monthLayout, viewMode }: {
         <Fragment key={i}>
           <div
             className={`absolute top-0 bottom-0 border-l ${mg.month === 1 ? "border-gray-300" : "border-gray-100"}`}
-            style={{ left: mg.x }} />
+            style={{ left: mg.x, transition: "left 0.3s ease" }} />
           {/* 주 구분선 (week view, 확장되지 않은 월) */}
           {viewMode === "week" && !mg.expanded && (mg.count ?? 4) > 1 && Array.from(
             { length: (mg.count ?? 4) - 1 },
