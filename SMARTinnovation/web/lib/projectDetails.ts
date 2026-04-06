@@ -5,23 +5,28 @@ export interface CustomField {
   value: string;
 }
 
-export type TableRow = string[]; // 셀 값 배열
+export type TableRow = string[];
 
 export interface TableData {
-  headers: string[];   // 열 헤더
-  rows: TableRow[];    // 데이터 행
+  headers: string[];
+  rows: TableRow[];
 }
 
 export function emptyTable(headers: string[]): TableData {
   return { headers, rows: [Array(headers.length).fill("")] };
 }
 
+export interface BomData {
+  productTable: TableData;   // 제품코드 표
+  materialTable: TableData;  // 자재코드 표
+}
+
 export interface ProjectDetailData {
-  description: string;       // 프로젝트 개요
-  bom: TableData;            // BOM 정보 (표)
-  batchSize: TableData;      // 배치사이즈 (표)
-  targetProduct: string;     // 대상 제품
-  customFields: CustomField[]; // 사용자 정의 필드
+  description: string;
+  bom: BomData;
+  batchSize: TableData;
+  targetProduct: string;
+  customFields: CustomField[];
 }
 
 export interface ProjectDetail {
@@ -32,10 +37,15 @@ export interface ProjectDetail {
   updatedAt?: string;
 }
 
+export const EMPTY_BOM: BomData = {
+  productTable:  emptyTable(["제품코드", "제품명", "비고"]),
+  materialTable: emptyTable(["구분", "자재코드", "자재명", "제조사", "비고"]),
+};
+
 export const EMPTY_DETAIL_DATA: ProjectDetailData = {
   description: "",
-  bom: emptyTable(["품목", "규격", "수량", "비고"]),
-  batchSize: emptyTable(["제품명", "배치사이즈", "단위", "비고"]),
+  bom: EMPTY_BOM,
+  batchSize: emptyTable(["구분", "배치번호", "배치사이즈"]),
   targetProduct: "",
   customFields: [],
 };

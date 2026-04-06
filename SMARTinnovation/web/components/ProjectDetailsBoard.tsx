@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Level1Item } from "@/lib/types";
 import {
-  ProjectDetailData, TableData, emptyTable, CustomField,
-  EMPTY_DETAIL_DATA,
+  ProjectDetailData, TableData, BomData, emptyTable, CustomField,
+  EMPTY_DETAIL_DATA, EMPTY_BOM,
   loadProjectDetails, saveProjectDetail,
 } from "@/lib/projectDetails";
 
@@ -161,18 +161,24 @@ export default function ProjectDetailsBoard({
       if (!list) { setTableError(true); return; }
       const m = new Map<string, ProjectDetailData>();
       list.forEach(d => {
-        // 구버전 string 데이터 마이그레이션
         const data = d.data as unknown as Record<string, unknown>;
-        m.set(d.level1Id, {
-          ...EMPTY_DETAIL_DATA,
-          ...data,
-          bom:       (typeof data.bom === "object" && data.bom !== null && "headers" in data.bom)
-                       ? data.bom as TableData
-                       : emptyTable(["품목", "규격", "수량", "비고"]),
-          batchSize: (typeof data.batchSize === "object" && data.batchSize !== null && "headers" in data.batchSize)
-                       ? data.batchSize as TableData
-                       : emptyTable(["제품명", "배치사이즈", "단위", "비고"]),
-        });
+        // bom 마이그레이션: 구버전 string → EMPTY_BOM, 구버전 단일 TableData → EMPTY_BOM, 신버전 BomData 그대로
+        let bom: BomData;
+        const rawBom = data.bom;
+        if (rawBom && typeof rawBom === "object" && "productTable" in rawBom) {
+          bom = rawBom as BomData;
+        } else {
+          bom = EMPTY_BOM;
+        }
+        // batchSize 마이그레이션: 구버전 string → 신규 기본값
+        let batchSize: TableData;
+        const rawBs = data.batchSize;
+        if (rawBs && typeof rawBs === "object" && "headers" in rawBs) {
+          batchSize = rawBs as TableData;
+        } else {
+          batchSize = emptyTable(["구분", "배치번호", "배치사이즈"]);
+        }
+        m.set(d.level1Id, { ...EMPTY_DETAIL_DATA, ...data, bom, batchSize });
       });
       setDetailsMap(m);
     });
@@ -244,7 +250,8 @@ export default function ProjectDetailsBoard({
   const hasFilled = (id: string) => {
     const d = detailsMap.get(id);
     if (!d) return false;
-    const bomHasData = d.bom?.rows?.some(r => r.some(c => c.trim()));
+    const bomHasData = d.bom?.productTable?.rows?.some(r => r.some(c => c.trim()))
+                    || d.bom?.materialTable?.rows?.some(r => r.some(c => c.trim()));
     const bsHasData  = d.batchSize?.rows?.some(r => r.some(c => c.trim()));
     return d.description || d.targetProduct || bomHasData || bsHasData || (d.customFields?.length ?? 0) > 0;
   };
@@ -354,20 +361,41 @@ export default function ProjectDetailsBoard({
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">배치사이즈</label>
                   <EditableTable
-                    table={detail.batchSize ?? emptyTable(["제품명", "배치사이즈", "단위", "비고"])}
+                    table={detail.batchSize ?? emptyTable(["구분", "배치번호", "배치사이즈"])}
                     editMode={editMode}
                     onChange={t => { startDraft(item.id); updateDraft(item.id, { batchSize: t }); }}
                   />
                 </div>
 
-                {/* BOM 표 */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">BOM 정보</label>
-                  <EditableTable
-                    table={detail.bom ?? emptyTable(["품목", "규격", "수량", "비고"])}
-                    editMode={editMode}
-                    onChange={t => { startDraft(item.id); updateDraft(item.id, { bom: t }); }}
-                  />
+                {/* BOM 정보 */}
+                <div className="space-y-3">
+                  <label className="block text-[11px] font-semibold text-gray-500">BOM 정보</label>
+
+                  {/* 1) 제품코드 */}
+                  <div>
+                    <p className="text-[11px] text-gray-400 mb-1 ml-0.5">① 제품코드</p>
+                    <EditableTable
+                      table={detail.bom?.productTable ?? emptyTable(["제품코드", "제품명", "비고"])}
+                      editMode={editMode}
+                      onChange={t => {
+                        startDraft(item.id);
+                        updateDraft(item.id, { bom: { ...(detail.bom ?? EMPTY_BOM), productTable: t } });
+                      }}
+                    />
+                  </div>
+
+                  {/* 2) 자재코드 */}
+                  <div>
+                    <p className="text-[11px] text-gray-400 mb-1 ml-0.5">② 자재코드</p>
+                    <EditableTable
+                      table={detail.bom?.materialTable ?? emptyTable(["구분", "자재코드", "자재명", "제조사", "비고"])}
+                      editMode={editMode}
+                      onChange={t => {
+                        startDraft(item.id);
+                        updateDraft(item.id, { bom: { ...(detail.bom ?? EMPTY_BOM), materialTable: t } });
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* 추가 항목 */}
