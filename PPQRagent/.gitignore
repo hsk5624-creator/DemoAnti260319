@@ -1,0 +1,38 @@
+# Dependencies
+web/node_modules/
+
+# Next.js build output
+web/.next/
+web/tsconfig.tsbuildinfo
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Uploaded data files (runtime, not source)
+uploads/*.xlsx
+uploads/*.xlsb
+uploads/*.docx
+uploads/tmp*
+uploads/product_info.json
+
+# Generated output files
+샘플결과물/
+PQR-*.docx
+
+# Sample & archive data (heavy binary data files)
+sample/
+archaive/
+
+# Root-level data files (raw xlsx/xlsb — not source code)
+*.xlsx
+*.xlsb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
