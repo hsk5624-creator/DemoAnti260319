@@ -94,7 +94,7 @@ export interface ProductAnalysis {
   purchaseEvents: PurchaseEvent[];
   freqStats: FreqStat[];
   avgMonthlyFreq: number;          // 과거 월평균 구매 건수
-  avgMonthlyQty: number;           // 과거 월평균 구매 수량(개)
+  avgMonthlyQty: number;           // 과거 월평균 구매 수량(개 또는 환산 개수)
   avgHistoryQtyPerPurchase: number; // 과거 건당 평균 수량
   avgIntervalDays: number; // 과거 평균 구매 간격(일), 0=계산불가
   lastPurchaseDate: string;// 마지막 구매일 (YYYY.MM.DD)
@@ -107,6 +107,9 @@ export interface ProductAnalysis {
   // 규격 목록 (dept 필터 적용 후, spec 필터 적용 전)
   uniqueSpecs: string[];
   selectedSpecs: string[]; // 현재 적용된 규격 필터 목록 (없으면 [])
+
+  // 규격 환산계수 (spec → 개/묶음). 설정된 규격만 포함, 나머지는 1로 간주
+  specFactors: Record<string, number>;
 }
 
 // ─── 헬퍼 ──────────────────────────────────────────────────
@@ -128,6 +131,19 @@ function unitPrice(r: MRORecord): number {
   return Math.round(r.amount / r.quantity);
 }
 
+// 규격환산 적용 단가 (개/묶음 factor 있으면 factor로 나눔)
+function normalizedUnitPrice(r: MRORecord, factors?: Record<string, number>): number {
+  const factor = factors?.[r.spec] ?? 1;
+  const effectiveQty = r.quantity * factor;
+  if (effectiveQty <= 0) return r.amount;
+  return Math.round(r.amount / effectiveQty);
+}
+
+// 규격환산 적용 수량 (개/묶음 factor 있으면 factor 배수)
+function normalizedQty(r: MRORecord, factors?: Record<string, number>): number {
+  return r.quantity * (factors?.[r.spec] ?? 1);
+}
+
 function monthLabel(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
@@ -139,10 +155,13 @@ export type OrderType = "all" | "normal" | "advance";
 export function analyzeProduct(
   productName: string,
   records: MRORecord[],
-  deptFilter?: string | string[],  // 단일 full 문자열 or 배열(담당/본부 필터), undefined = 전체
-  specFilter?: string[],           // 규격 exact match 목록, undefined = 전체
-  orderType?: OrderType            // 발주유형: all=전체, normal=일반(2), advance=선발주(7)
+  deptFilter?: string | string[],         // 단일 full 문자열 or 배열(담당/본부 필터), undefined = 전체
+  specFilter?: string[],                  // 규격 exact match 목록, undefined = 전체
+  orderType?: OrderType,                  // 발주유형: all=전체, normal=일반(2), advance=선발주(7)
+  specFactors?: Record<string, number>    // 규격별 환산계수 (개/묶음). 없으면 1로 간주
 ): ProductAnalysis {
+  const up = (r: MRORecord) => normalizedUnitPrice(r, specFactors);
+  const nq = (r: MRORecord) => normalizedQty(r, specFactors);
   const byName = records.filter((r) => r.productName === productName);
   const byDept = !deptFilter || (Array.isArray(deptFilter) && deptFilter.length === 0)
     ? byName
@@ -176,18 +195,19 @@ export function analyzeProduct(
     if (!r.year || !r.month) continue;
     const key = monthLabel(r.year, r.month);
     const existing = monthMap.get(key);
-    const up = unitPrice(r);
+    const rUp = up(r);
+    const rQty = nq(r);
     if (existing) {
       existing.totalAmount += r.amount;
-      existing.totalQuantity += r.quantity;
+      existing.totalQuantity += rQty;
       existing.count += 1;
       existing.avgUnitPrice = existing.totalQuantity > 0
-        ? Math.round(existing.totalAmount / existing.totalQuantity) : up;
+        ? Math.round(existing.totalAmount / existing.totalQuantity) : rUp;
     } else {
       monthMap.set(key, {
         label: key, year: r.year, month: r.month,
-        totalAmount: r.amount, totalQuantity: r.quantity, count: 1,
-        avgUnitPrice: up,
+        totalAmount: r.amount, totalQuantity: rQty, count: 1,
+        avgUnitPrice: rUp,
       });
     }
   }
@@ -200,9 +220,9 @@ export function analyzeProduct(
     .filter((r) => r.orderDate)
     .map((r) => ({
       label: r.orderDate,
-      unitPrice: unitPrice(r),
+      unitPrice: up(r),
       amount: r.amount,
-      quantity: r.quantity,
+      quantity: nq(r),
       department: parseDept(r.department).department,
       orderDate: r.orderDate,
       year: r.year,
@@ -210,8 +230,8 @@ export function analyzeProduct(
     }))
     .sort((a, b) => a.orderDate.localeCompare(b.orderDate));
 
-  const historyPrices = history.map(unitPrice).filter((p) => p > 0);
-  const allPrices = all.map(unitPrice).filter((p) => p > 0);
+  const historyPrices = history.map(up).filter((p) => p > 0);
+  const allPrices = all.map(up).filter((p) => p > 0);
   const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
 
   const priceStats = {
@@ -265,9 +285,9 @@ export function analyzeProduct(
     .map((r) => ({
       orderDate: r.orderDate,
       timestamp: parseTimestamp(r.orderDate),
-      quantity: r.quantity,
+      quantity: nq(r),
       amount: r.amount,
-      unitPrice: unitPrice(r),
+      unitPrice: up(r),
       year: r.year,
       spec: r.spec,
       department: parseDept(r.department).department,
@@ -303,8 +323,8 @@ export function analyzeProduct(
     ? historyFreqMonths.reduce((s, f) => s + f.count, 0) / historyMonths
     : 0;
 
-  // 과거 월평균 수량 (개수 기준)
-  const historyTotalQty = history.reduce((s, r) => s + r.quantity, 0);
+  // 과거 월평균 수량 (환산 적용 시 개별 단위, 미적용 시 묶음 단위)
+  const historyTotalQty = history.reduce((s, r) => s + nq(r), 0);
   const avgMonthlyQty = historyTotalQty > 0
     ? Math.round((historyTotalQty / historyMonths) * 10) / 10
     : 0;
@@ -316,7 +336,7 @@ export function analyzeProduct(
 
   // ── E) 2026 이상징후 분석 ──
   const highlights2026: Year2026Highlight[] = curr2026.map((r) => {
-    const up = unitPrice(r);
+    const rUp = up(r);
     const flags: Flag[] = [];
 
     // 신규 품목 여부
@@ -329,26 +349,27 @@ export function analyzeProduct(
       });
     } else {
       // 단가 급등
-      if (priceStats.avgHistory > 0 && up > priceStats.avgHistory * 1.5) {
-        const ratio = Math.round((up / priceStats.avgHistory - 1) * 100);
+      if (priceStats.avgHistory > 0 && rUp > priceStats.avgHistory * 1.5) {
+        const ratio = Math.round((rUp / priceStats.avgHistory - 1) * 100);
         flags.push({
           type: "price_spike",
           label: "단가 급등",
-          severity: up > priceStats.avgHistory * 2 ? "danger" : "warning",
+          severity: rUp > priceStats.avgHistory * 2 ? "danger" : "warning",
           detail: `과거 평균단가 ${priceStats.avgHistory.toLocaleString()}원 대비 +${ratio}%`,
         });
       }
 
-      // 수량 급증: 해당 월의 수량 vs 과거 월평균
-      const historyTotalQty = history.reduce((s, h) => s + h.quantity, 0);
-      const avgMonthlyQty = historyTotalQty / historyMonths;
-      if (avgMonthlyQty > 0 && r.quantity > avgMonthlyQty * 3) {
-        const ratio = Math.round(r.quantity / avgMonthlyQty * 100);
+      // 수량 급증: 해당 월의 수량 vs 과거 월평균 (환산 적용 시 개별 단위 기준)
+      const historyTotalQtyAnomaly = history.reduce((s, h) => s + nq(h), 0);
+      const avgMonthlyQtyAnomaly = historyTotalQtyAnomaly / historyMonths;
+      const rNq = nq(r);
+      if (avgMonthlyQtyAnomaly > 0 && rNq > avgMonthlyQtyAnomaly * 3) {
+        const ratio = Math.round(rNq / avgMonthlyQtyAnomaly * 100);
         flags.push({
           type: "quantity_spike",
           label: "수량 급증",
           severity: "warning",
-          detail: `과거 월평균 ${avgMonthlyQty.toFixed(1)}개 대비 ${ratio}% (${r.quantity}개)`,
+          detail: `과거 월평균 ${avgMonthlyQtyAnomaly.toFixed(1)}개 대비 ${ratio}% (${rNq}개)`,
         });
       }
 
@@ -370,9 +391,9 @@ export function analyzeProduct(
     return {
       orderDate: r.orderDate,
       orderNumber: r.orderNumber,
-      quantity: r.quantity,
+      quantity: nq(r),
       amount: r.amount,
-      unitPrice: up,
+      unitPrice: rUp,
       department: parseDept(r.department).department,
       requester: r.requester,
       manufacturer: r.manufacturer,
@@ -401,5 +422,6 @@ export function analyzeProduct(
     purchaseEvents,
     avgIntervalDays,
     lastPurchaseDate,
+    specFactors: specFactors ?? {},
   };
 }

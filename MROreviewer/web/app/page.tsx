@@ -138,10 +138,12 @@ export default function Home() {
 
   // 부서 필터
   const [depts, setDepts] = useState<DeptItem[]>([]);
-  const [deptFilter, setDeptFilter] = useState<DeptFilter>({ bonbu: "", damdang: "", dept: "" });
+  const [deptFilter, setDeptFilter] = useState<DeptFilter>({ bonbu: "", damdang: "", depts: [] });
 
   // 규격 검색
   const [selectedSpecs, setSelectedSpecs] = useState<Set<string>>(new Set());
+  // 규격 환산계수 (spec → 개/묶음)
+  const [specFactors, setSpecFactors] = useState<Record<string, number>>({});
   const specDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 검토 중인 구매 건
@@ -167,17 +169,31 @@ export default function Home() {
   }, []);
 
   // 필터 → API 파라미터 변환
-  const buildFilterParams = useCallback((f: DeptFilter, specs?: Set<string>) => {
+  const buildFilterParams = useCallback((
+    f: DeptFilter,
+    specs?: Set<string>,
+    factors?: Record<string, number>,
+  ) => {
     const p = new URLSearchParams();
-    if (f.dept)         p.set("dept",    f.dept);
-    else if (f.damdang) p.set("damdang", f.damdang);
-    else if (f.bonbu)   p.set("bonbu",   f.bonbu);
+    if (f.depts.length > 0) f.depts.forEach((d) => p.append("dept", d));
+    else if (f.damdang)     p.set("damdang", f.damdang);
+    else if (f.bonbu)       p.set("bonbu",   f.bonbu);
     specs?.forEach((s) => p.append("spec", s));
+    if (factors) {
+      Object.entries(factors).forEach(([spec, factor]) => {
+        if (factor > 1) { p.append("sfSpec", spec); p.append("sfFactor", String(factor)); }
+      });
+    }
     return p;
   }, []);
 
   // 상품 분석 실행
-  const searchProduct = useCallback(async (name: string, f?: DeptFilter, specs?: Set<string>) => {
+  const searchProduct = useCallback(async (
+    name: string,
+    f?: DeptFilter,
+    specs?: Set<string>,
+    factors?: Record<string, number>,
+  ) => {
     setQuery(name);
     setShowSuggestions(false);
     setLoading(true);
@@ -186,7 +202,11 @@ export default function Home() {
     try {
       const url = new URL("/api/product", window.location.origin);
       url.searchParams.set("name", name);
-      const fp = buildFilterParams(f ?? deptFilter, specs !== undefined ? specs : selectedSpecs);
+      const fp = buildFilterParams(
+        f ?? deptFilter,
+        specs !== undefined ? specs : selectedSpecs,
+        factors !== undefined ? factors : specFactors,
+      );
       fp.forEach((v, k) => url.searchParams.append(k, v));
       const res = await fetch(url.toString());
       const data = await res.json();
@@ -197,28 +217,47 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [deptFilter, selectedSpecs, buildFilterParams]);
+  }, [deptFilter, selectedSpecs, specFactors, buildFilterParams]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && query.trim()) searchProduct(query.trim());
   };
 
-  // 부서 필터 변경 시 재조회 (검토입력 유지)
+  // 부서 필터 변경 시 재조회 (규격/환산 초기화)
   const handleFilterChange = useCallback((f: DeptFilter) => {
     setDeptFilter(f);
     setSelectedSpecs(new Set());
-    if (query.trim() && analysis) searchProduct(query.trim(), f, new Set());
+    setSpecFactors({});
+    if (query.trim() && analysis) searchProduct(query.trim(), f, new Set(), {});
   }, [query, analysis, searchProduct]);
 
-  // 규격 체크박스 변경 시 300ms 디바운스 재조회
+  // 규격 체크박스 변경 시 300ms 디바운스 재조회 (선택 해제된 규격 환산계수 정리)
   const handleSpecsChange = useCallback((next: Set<string>) => {
     setSelectedSpecs(next);
+    const nextFactors: Record<string, number> = {};
+    Object.entries(specFactors).forEach(([spec, factor]) => {
+      if (next.has(spec)) nextFactors[spec] = factor;
+    });
+    setSpecFactors(nextFactors);
     if (specDebounceRef.current) clearTimeout(specDebounceRef.current);
     if (!query.trim() || !analysis) return;
     specDebounceRef.current = setTimeout(() => {
-      searchProduct(query.trim(), deptFilter, next);
+      searchProduct(query.trim(), deptFilter, next, nextFactors);
     }, 300);
-  }, [query, analysis, deptFilter, searchProduct]);
+  }, [query, analysis, deptFilter, specFactors, searchProduct]);
+
+  // 규격 환산계수 변경 시 300ms 디바운스 재조회
+  const handleFactorChange = useCallback((spec: string, factor: number | null) => {
+    const next = { ...specFactors };
+    if (factor === null || factor <= 1) delete next[spec];
+    else next[spec] = factor;
+    setSpecFactors(next);
+    if (specDebounceRef.current) clearTimeout(specDebounceRef.current);
+    if (!query.trim() || !analysis) return;
+    specDebounceRef.current = setTimeout(() => {
+      searchProduct(query.trim(), deptFilter, selectedSpecs, next);
+    }, 300);
+  }, [specFactors, query, analysis, deptFilter, selectedSpecs, searchProduct]);
 
   // 2026 이상 건수 집계
   const flagCount = analysis?.highlights2026.reduce((s, h) => ({
@@ -303,6 +342,8 @@ export default function Home() {
               specs={analysis.uniqueSpecs}
               selected={selectedSpecs}
               onChange={handleSpecsChange}
+              specFactors={specFactors}
+              onFactorChange={handleFactorChange}
             />
           )}
 
@@ -327,14 +368,15 @@ export default function Home() {
                     {deptFilter.damdang}
                   </span>
                 )}
-                {deptFilter.dept && (
-                  <span className="text-xs bg-gray-100 text-gray-600 border border-gray-200 rounded-full px-2.5 py-0.5 shrink-0">
-                    {depts.find((d) => d.full === deptFilter.dept)?.team ?? deptFilter.dept}
+                {deptFilter.depts.map((full) => (
+                  <span key={full} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 rounded-full px-2.5 py-0.5 shrink-0">
+                    {depts.find((d) => d.full === full)?.team ?? full}
                   </span>
-                )}
+                ))}
                 {selectedSpecs.size > 0 && (
                   <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5 shrink-0">
                     규격 {selectedSpecs.size}개 선택
+                    {Object.keys(specFactors).length > 0 && " · 환산 적용"}
                   </span>
                 )}
               </div>

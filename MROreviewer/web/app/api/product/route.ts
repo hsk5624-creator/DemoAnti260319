@@ -12,19 +12,29 @@ export async function GET(request: Request) {
   const name = (searchParams.get("name") ?? "").trim();
   if (!name) return Response.json({ error: "name required" }, { status: 400 });
 
-  const dept     = searchParams.get("dept")    ?? "";  // 팀 full 문자열
+  const deptParams = searchParams.getAll("dept");     // 팀 full 문자열 (복수 가능)
   const damdang  = searchParams.get("damdang") ?? "";  // 담당 이름
   const bonbu    = searchParams.get("bonbu")   ?? "";  // 본부 이름
   const specParam = searchParams.getAll("spec");       // 규격 exact match (파라미터 반복)
   const ot       = searchParams.get("orderType") ?? "all";
 
+  // 규격 환산계수: sfSpec[]=규격명 + sfFactor[]=계수 쌍으로 전달
+  const sfSpecs   = searchParams.getAll("sfSpec");
+  const sfFactors = searchParams.getAll("sfFactor");
+  const specFactors: Record<string, number> = {};
+  sfSpecs.forEach((spec, i) => {
+    const f = parseFloat(sfFactors[i] ?? "1");
+    if (f > 1) specFactors[spec] = f;
+  });
+  const hasFactors = Object.keys(specFactors).length > 0;
+
   const records = loadAllRecords();
 
   let deptFilter: string | string[] | undefined;
 
-  if (dept) {
-    // 팀 단위 필터
-    deptFilter = dept;
+  if (deptParams.length > 0) {
+    // 팀 단위 필터 (단일 or 복수)
+    deptFilter = deptParams.length === 1 ? deptParams[0] : deptParams;
   } else if (damdang) {
     // 담당 단위: 해당 담당에 속한 full dept 문자열 목록
     deptFilter = records
@@ -47,6 +57,7 @@ export async function GET(request: Request) {
 
   const orderType: OrderType = (ot === "normal" || ot === "advance") ? ot : "all";
   const specFilter = specParam.length > 0 ? specParam : undefined;
-  const analysis = analyzeProduct(name, records, deptFilter, specFilter, orderType);
+  const analysis = analyzeProduct(name, records, deptFilter, specFilter, orderType,
+    hasFactors ? specFactors : undefined);
   return Response.json(analysis);
 }

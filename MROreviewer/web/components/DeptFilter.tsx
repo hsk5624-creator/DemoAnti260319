@@ -10,9 +10,9 @@ export interface DeptItem {
 }
 
 export interface DeptFilter {
-  bonbu: string;    // "" = 전체
-  damdang: string;  // "" = 전체
-  dept: string;     // "" = 전체 (full 문자열)
+  bonbu: string;      // "" = 전체
+  damdang: string;    // "" = 전체
+  depts: string[];    // 선택된 팀 full 문자열 목록 (빈 배열 = 전체)
 }
 
 interface Props {
@@ -72,7 +72,7 @@ function SmallTab({
 }
 
 export default function DeptFilter({ depts, filter, onChange }: Props) {
-  const { bonbu, damdang, dept } = filter;
+  const { bonbu, damdang, depts: selectedDepts } = filter;
 
   // 현재 데이터에 존재하는 본부 목록
   const activeBonbus = BONBU_ORDER.filter((b) => depts.some((d) => d.bonbu === b));
@@ -87,17 +87,17 @@ export default function DeptFilter({ depts, filter, onChange }: Props) {
     ? depts.filter((d) => d.damdang === damdang).sort((a, b) => a.team.localeCompare(b.team))
     : [];
 
-  // 현재 선택된 레이블
-  const activeTeam = depts.find((d) => d.full === dept);
-
   function setBonbu(val: string) {
-    onChange({ bonbu: val, damdang: "", dept: "" });
+    onChange({ bonbu: val, damdang: "", depts: [] });
   }
   function setDamdang(val: string) {
-    onChange({ bonbu, damdang: val, dept: "" });
+    onChange({ bonbu, damdang: val, depts: [] });
   }
-  function setDept(val: string) {
-    onChange({ bonbu, damdang, dept: val === dept ? "" : val });
+  function toggleDept(full: string) {
+    const next = selectedDepts.includes(full)
+      ? selectedDepts.filter((d) => d !== full)
+      : [...selectedDepts, full];
+    onChange({ bonbu, damdang, depts: next });
   }
 
   return (
@@ -110,7 +110,7 @@ export default function DeptFilter({ depts, filter, onChange }: Props) {
           active={bonbu === ""}
           color="bg-gray-700 hover:bg-gray-800"
           inactiveColor="hover:bg-gray-100 hover:text-gray-700"
-          onClick={() => onChange({ bonbu: "", damdang: "", dept: "" })}
+          onClick={() => onChange({ bonbu: "", damdang: "", depts: [] })}
         />
         {activeBonbus.map((b) => (
           <Tab
@@ -142,20 +142,24 @@ export default function DeptFilter({ depts, filter, onChange }: Props) {
       {/* ── 3단계: 팀 (담당 선택 시) ────── */}
       {teamList.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pt-2 border-t border-gray-100">
-          <SmallTab label="전체 팀" active={dept === ""} onClick={() => setDept("")} />
+          <SmallTab
+            label="전체 팀"
+            active={selectedDepts.length === 0}
+            onClick={() => onChange({ bonbu, damdang, depts: [] })}
+          />
           {teamList.map((d) => (
             <SmallTab
               key={d.full}
               label={d.team}
-              active={dept === d.full}
-              onClick={() => setDept(d.full)}
+              active={selectedDepts.includes(d.full)}
+              onClick={() => toggleDept(d.full)}
             />
           ))}
         </div>
       )}
 
       {/* ── 현재 필터 뱃지 ────────────────── */}
-      {(bonbu || damdang || dept) && (
+      {(bonbu || damdang || selectedDepts.length > 0) && (
         <div className="flex items-center gap-1.5 pt-1 flex-wrap text-xs">
           <span className="text-gray-400">필터:</span>
           {bonbu && (
@@ -168,13 +172,25 @@ export default function DeptFilter({ depts, filter, onChange }: Props) {
               {damdang}
             </span>
           )}
-          {dept && (
-            <span className="bg-gray-100 text-gray-600 border border-gray-200 rounded-full px-2.5 py-0.5">
-              {activeTeam?.team ?? dept}
-            </span>
-          )}
+          {selectedDepts.map((full) => {
+            const item = depts.find((d) => d.full === full);
+            return (
+              <span
+                key={full}
+                className="bg-gray-100 text-gray-600 border border-gray-200 rounded-full px-2.5 py-0.5 flex items-center gap-1"
+              >
+                {item?.team ?? full}
+                <button
+                  onClick={() => toggleDept(full)}
+                  className="text-gray-400 hover:text-gray-700 leading-none"
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
           <button
-            onClick={() => onChange({ bonbu: "", damdang: "", dept: "" })}
+            onClick={() => onChange({ bonbu: "", damdang: "", depts: [] })}
             className="text-gray-300 hover:text-gray-500 ml-0.5"
           >
             × 초기화
