@@ -177,6 +177,74 @@ def fmt_date_dot(v):
     if len(s) == 8 and s.isdigit(): return f"{s[:4]}.{s[4:6]}.{s[6:]}"
     return s[:10] if s else ""
 
+# ── 제조번호 매칭 헬퍼 ────────────────────────────────────────────────
+def _find_col_by_header(ws, target: str, max_search_rows: int = 8, max_col: int = 25) -> tuple[int, int] | None:
+    """헤더 텍스트로 (header_row, col_idx) 찾음. 정확 일치 우선, 부분 일치 fallback. 1-based."""
+    target = target.strip()
+    partial = None
+    for r in range(1, max_search_rows + 1):
+        for c in range(1, max_col + 1):
+            v = str(ws.cell(r, c).value or "").strip()
+            if not v: continue
+            if v == target:
+                return (r, c)
+            if partial is None and target in v:
+                partial = (r, c)
+    return partial
+
+def _normalize_batch(s: str) -> str:
+    """배치번호 정규화: 마켓 접미사 '(KR)/(General)/(TW)' 제거 + sublot 끝글자 제거.
+    예: 'CJAE004E' → 'CJAE004', 'CHRD001A(KR)' → 'CHRD001'."""
+    if not s: return ""
+    s = re.sub(r'\s*\([^)]*\)\s*$', '', s.strip()).strip()
+    if s and s[-1].isalpha():
+        s = s[:-1]
+    return s
+
+def _split_batches_in_cell(text: str) -> list[str]:
+    """일탈/불만 셀의 다중 배치(콤마/줄바꿈 구분) → 정규화 리스트."""
+    if not text: return []
+    out: list[str] = []
+    for part in re.split(r'[,\n]', str(text)):
+        part = part.strip()
+        if not part: continue
+        # 'A~B' 범위 표기는 양 끝값만 추출 (예: CHYD006~CHYD025B)
+        for token in part.split('~'):
+            norm = _normalize_batch(token.strip())
+            if norm and norm not in out:
+                out.append(norm)
+    return out
+
+def _get_wms_batches(cfg: dict) -> set[str]:
+    """제품코드(code_prefix) 기준 WMS의 2025년 제조번호 set. cfg에 캐싱.
+    헤더 컬럼은 동적 탐색 — '제조일자', '제조제품', '제조번호'."""
+    if "_wms_batches" in cfg:
+        return cfg["_wms_batches"]
+    code_prefix = cfg.get("code_prefix", "")
+    batches: set[str] = set()
+    if code_prefix:
+        try:
+            wb = load_wb("wms")
+            ws = wb.active
+            mfg   = _find_col_by_header(ws, "제조일자")
+            code  = _find_col_by_header(ws, "제조제품")
+            batch = _find_col_by_header(ws, "제조번호")
+            if mfg and code and batch:
+                hdr_row = max(mfg[0], code[0], batch[0])
+                for r in range(hdr_row + 1, ws.max_row + 1):
+                    code_v = str(ws.cell(r, code[1]).value or "").strip()
+                    if code_v != code_prefix: continue
+                    mfg_v = fmt_date(str(ws.cell(r, mfg[1]).value or ""))
+                    if not mfg_v.startswith("2025"): continue
+                    bn = str(ws.cell(r, batch[1]).value or "").strip()
+                    if bn:
+                        batches.add(_normalize_batch(bn))
+            wb.close()
+        except Exception:
+            pass
+    cfg["_wms_batches"] = batches
+    return batches
+
 # ── BDC 배치사이즈 맵 ─────────────────────────────────────────────────
 def build_batch_size_map():
     bsmap = {}
@@ -412,14 +480,15 @@ def map_t18(cfg: dict):
 def map_t19(cfg: dict):
     wb = load_wb("complaint")
     ws = wb.active
-    code_prefix   = cfg["code_prefix"]
-    name_variants = cfg["name_variants"]
-    filter_terms  = name_variants + ([code_prefix] if code_prefix else [])
+    wms_batches = _get_wms_batches(cfg)   # 2025년 자사 생산 배치 set
 
     rows = []
     for r in range(2, ws.max_row+1):
-        product = str(ws.cell(r,5).value or "")
-        if not any(t in product for t in filter_terms): continue
+        batch_cell = str(ws.cell(r, 6).value or "")   # col F = 제조번호
+        if not batch_cell: continue
+        cell_batches = _split_batches_in_cell(batch_cell)
+        if not any(b in wms_batches for b in cell_batches): continue
+
         recv         = fmt_date_dot(ws.cell(r,1).value)
         comp_no      = str(ws.cell(r,4).value or "")
         comp_type_kr = str(ws.cell(r,11).value or "").replace("\n"," ").strip()
@@ -518,8 +587,7 @@ def map_scar(cfg: dict):
 def map_deviation(cfg: dict):
     wb = load_wb("deviation")
     ws = wb["2025"]
-    name_variants = cfg["name_variants"]
-    code_prefix   = cfg["code_prefix"]
+    wms_batches = _get_wms_batches(cfg)   # 2025년 자사 생산 배치 set
 
     rows = []
     for r in range(4, ws.max_row + 1):          # 헤더 row3, 데이터 row4~
@@ -531,14 +599,11 @@ def map_deviation(cfg: dict):
         open_dt  = ws.cell(r, 8).value
         close_dt = ws.cell(r, 10).value
         status   = str(ws.cell(r, 11).value or "").strip()
-        prod_nm  = str(ws.cell(r, 15).value or "").strip()   # 제품명
-        batch_mk = str(ws.cell(r, 16).value or "").strip()   # 제조번호(마켓)
+        batch_mk = str(ws.cell(r, 16).value or "").strip()   # col P = 제조번호(마켓 다중)
 
-        # 필터: 제품명에 name_variants 포함, 없으면 code_prefix로 시도
-        if name_variants:
-            if not any(v in prod_nm for v in name_variants): continue
-        elif code_prefix:
-            if code_prefix not in prod_nm and code_prefix not in batch_mk: continue
+        # 필터: 셀 안의 배치번호들 중 하나라도 WMS 2025 배치와 매칭되면 포함
+        cell_batches = _split_batches_in_cell(batch_mk)
+        if not any(b in wms_batches for b in cell_batches): continue
 
         open_str  = fmt_date(open_dt)
         close_str = fmt_date(close_dt) if close_dt else ("진행 중" if status != "종료" else "")
