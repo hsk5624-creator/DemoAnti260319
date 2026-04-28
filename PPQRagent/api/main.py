@@ -770,13 +770,12 @@ def _find_header_row_iterrows(first_rows: list[tuple]) -> int:
 # Word 양식 채우기
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WORD_TABLE_MAP = {
-    10: ("t11",          ["No","Batch No","Date of Manufacture","Batch Size","Packaging Unit","Product Batch No.","Market","Remark"]),
-    15: ("t16",          ["No","Change no.","Change Information","Open/Close date"]),
-    17: ("t18",          ["No","CAPA No.","Summary","Open/Close date"]),
-    18: ("t19",          ["No","Complaint No.","Contents / Corrective Action","Receive / Complete Date"]),
-    25: ("t_scar",       ["No","Company","Contents/ Corrective Action/ Evaluation","Send date/\nComplete Date"]),
+     4: ("t11",          ["No","Batch No","Date of Manufacture","Batch Size","Packaging Unit","Product Batch No.","Remark"]),
      7: ("t_deviation",  ["No","일탈 번호","일탈 내용 / 조치사항/ 평가","개시일/완료일"]),
+     9: ("t16",          ["No","Change no.","Change Information","Open/Close date"]),
+    11: ("t18",          ["No","CAPA No.","Summary","Open/Close date"]),
     12: ("t_banpum",     ["No","반품일자","반품수량","반품사유","처분결과"]),
+    13: ("t19",          ["No","Complaint No.","Contents / Corrective Action","Receive / Complete Date"]),
 }
 
 def _fill_table(word_tbl, data_rows: list[dict], columns: list[str]):
