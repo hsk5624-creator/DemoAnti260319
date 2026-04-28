@@ -104,6 +104,31 @@ def get_product_config(product_name: str = "", product_code: str = "", api_name:
     code = product_code.strip()
     api  = api_name.strip()
 
+    # 제품명 없을 때 배치 파일에서 코드 → 제품명 자동 조회 (마켓 접미사 제거 후 전체 이름 수집)
+    _extra_variants: list[str] = []
+    if not name and code:
+        code_prefix_tmp = code[:5] if len(code) >= 5 else code
+        try:
+            batch_path = UPLOAD_FILES["batch"] if UPLOAD_FILES["batch"].exists() else SAMPLE_FILES["batch"]
+            wb_b = openpyxl.load_workbook(str(batch_path), read_only=True, data_only=True)
+            ws_b = wb_b.active
+            found_bases: list[str] = []
+            for row in ws_b.iter_rows(min_row=4, values_only=True):
+                raw_code = str(row[2] or "").strip()   # 코드번호 (col3)
+                raw_name = str(row[0] or "").strip()   # 제품명   (col1)
+                if not raw_name or not raw_code: continue
+                if code_prefix_tmp not in raw_code: continue
+                # "(KR)", "(HK,TH)" 같은 마켓 접미사 제거
+                base = re.sub(r'\s*\([A-Z]{2}(?:[,\s/][A-Z]{2})*\)\s*$', '', raw_name).strip()
+                if base and base not in found_bases:
+                    found_bases.append(base)
+            wb_b.close()
+            if found_bases:
+                name = found_bases[0]
+                _extra_variants = found_bases[1:]  # 추가 이름 (영문명 등)
+        except Exception:
+            pass
+
     # Generate name variants: original + no-space + space-before-trailing-number
     name_variants: list[str] = []
     if name:
@@ -116,6 +141,14 @@ def get_product_config(product_name: str = "", product_code: str = "", api_name:
             spaced = f"{m.group(1)} {m.group(2)}{m.group(3) or ''}"
             if spaced not in name_variants:
                 name_variants.append(spaced)
+
+    # 배치 파일에서 수집한 추가 이름(영문명 등)도 variants에 포함
+    for extra in _extra_variants:
+        if extra not in name_variants:
+            name_variants.append(extra)
+        no_sp = extra.replace(" ", "")
+        if no_sp != extra and no_sp not in name_variants:
+            name_variants.append(no_sp)
 
     return {
         "product_name": name,
