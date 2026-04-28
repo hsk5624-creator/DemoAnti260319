@@ -877,8 +877,8 @@ async def upload_files(
     capa:         UploadFile = File(None),
     complaint:    UploadFile = File(None),
     scar:         UploadFile = File(None),
-    rmt:          UploadFile = File(None),
-    fpt:          UploadFile = File(None),
+    deviation:    UploadFile = File(None),
+    banpum:       UploadFile = File(None),
     template:     UploadFile = File(None),
 ):
     if product_name or product_code:
@@ -888,7 +888,7 @@ async def upload_files(
     uploaded = []
     pairs = [("batch", batch), ("wms", wms), ("cc", cc),
              ("capa", capa), ("complaint", complaint), ("scar", scar),
-             ("rmt", rmt), ("fpt", fpt), ("template", template)]
+             ("deviation", deviation), ("banpum", banpum), ("template", template)]
     for key, uf in pairs:
         if uf and uf.filename:
             data = await uf.read()
@@ -920,7 +920,7 @@ def upload_status():
             "uploaded": UPLOAD_FILES[key].exists(),
             "filename": UPLOAD_FILES[key].name if UPLOAD_FILES[key].exists() else None,
         }
-        for key in ["batch", "wms", "cc", "capa", "complaint", "scar", "rmt", "fpt", "template"]
+        for key in ["batch", "wms", "cc", "capa", "complaint", "scar", "deviation", "banpum", "template"]
     }
 
 

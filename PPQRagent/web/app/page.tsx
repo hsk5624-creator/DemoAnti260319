@@ -53,20 +53,20 @@ const FILE_SLOTS = [
     icon: "🔧",
   },
   {
-    key: "rmt",
-    label: "원자재 시험성적 관리",
-    desc: "표22 — API 수입 시험 현황",
-    accept: ".xlsb,.xlsx",
-    sampleKey: "rmt",
-    icon: "🧪",
+    key: "deviation",
+    label: "Deviation Log (일탈 로그)",
+    desc: "일탈 — Deviation Log 2025",
+    accept: ".xlsx",
+    sampleKey: "deviation",
+    icon: "⚠️",
   },
   {
-    key: "fpt",
-    label: "완제품 시험성적 관리",
-    desc: "완제품 QC 출하 현황",
+    key: "banpum",
+    label: "반품 내역",
+    desc: "반품 — 반품 내역 (.xlsb)",
     accept: ".xlsb,.xlsx",
-    sampleKey: "fpt",
-    icon: "💊",
+    sampleKey: "banpum",
+    icon: "↩️",
   },
 ];
 
@@ -78,8 +78,8 @@ const SLOT_KEYWORDS: Record<string, string[]> = {
   capa:      ["capa"],
   complaint: ["불만", "complaint"],
   scar:      ["scar", "supplier corrective"],
-  rmt:       ["원자재 시험", "원자재시험"],
-  fpt:       ["완제품 시험", "완제품시험"],
+  deviation: ["deviation", "일탈"],
+  banpum:    ["반품"],
 };
 
 function matchFileToSlot(filename: string): string | null {
