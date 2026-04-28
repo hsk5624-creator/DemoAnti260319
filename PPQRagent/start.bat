@@ -31,16 +31,18 @@ cd /d "%~dp0web"
 start "PPQR Next.js" cmd /k "npm run dev"
 
 echo.
-echo  Waiting for Next.js to compile... (first run may take 30+ seconds)
+echo  Waiting for both servers...
+echo  (Next.js compile ~30s + FastAPI preload ~30s on first run)
 echo.
 
 set TRIES=0
 :WAIT_LOOP
 timeout /t 2 /nobreak > nul
 set /a TRIES+=1
-curl -s -o nul -w "%%{http_code}" http://localhost:3001 2>nul | findstr /r "^[23]" > nul
+:: Hit /api/health via Next.js proxy — succeeds only when BOTH 3001 AND 8000 are up
+curl -s -o nul -w "%%{http_code}" http://localhost:3001/api/health 2>nul | findstr /r "^200" > nul
 if not errorlevel 1 goto READY
-if %TRIES% geq 60 goto TIMEOUT
+if %TRIES% geq 90 goto TIMEOUT
 echo  . still waiting... (%TRIES% x 2s)
 goto WAIT_LOOP
 
@@ -61,7 +63,7 @@ goto END
 
 :TIMEOUT
 echo.
-echo  [WARNING] Server did not respond within 120 seconds.
+echo  [WARNING] Servers did not become ready within 180 seconds.
 echo  Check the "PPQR FastAPI" and "PPQR Next.js" windows for error messages.
 echo  You can manually open: http://localhost:3001
 echo.
