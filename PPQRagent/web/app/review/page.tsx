@@ -6,13 +6,13 @@ import ReviewTable from "@/components/ReviewTable";
 import SourcePanel from "@/components/SourcePanel";
 
 const TABS = [
-  { id: "t11",     label: "표11 제조배치" },
-  { id: "t16",     label: "표16 변경관리" },
-  { id: "t18",     label: "표18 CAPA" },
-  { id: "t19",     label: "표19 불만" },
-  { id: "t_scar",  label: "표25 SCAR" },
-  { id: "t22_api", label: "표22 원자재 시험" },
-  { id: "t_fpt",   label: "완제품 QC" },
+  { id: "t11",         label: "표11 제조배치" },
+  { id: "t16",         label: "표16 변경관리" },
+  { id: "t18",         label: "표18 CAPA" },
+  { id: "t19",         label: "표19 불만" },
+  { id: "t_scar",      label: "표25 SCAR" },
+  { id: "t_deviation", label: "일탈" },
+  { id: "t_banpum",    label: "반품" },
 ];
 
 type Source = { file: string; sheet: string; row: number };

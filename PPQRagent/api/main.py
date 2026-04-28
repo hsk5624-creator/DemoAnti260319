@@ -30,6 +30,8 @@ SAMPLE_FILES = {
     "capa":      SAMPLE / "6) List of CAPA (2025)_QA1.xlsx",
     "complaint": SAMPLE / "7) 2025년도 소비자불만 리스트.xlsx",
     "scar":      SAMPLE / "10) QS06012-A4(1.0) Tracking Database for Supplier Corrective Action_20260113 (최신).xlsx",
+    "deviation": SAMPLE / "4) QS09001-A3 Deviation Log 2025.xlsx",
+    "banpum":    SAMPLE / "7) 반품 내역.xlsb",
     "rmt":       SAMPLE / "10) 원자재 시험성적 관리.xlsb",
     "fpt":       SAMPLE / "2) 완제품 시험성적 관리.xlsb",
     "bdc_100k":  SAMPLE / "Batch Data Collection_300244_M04 80mg (Inist)_O.xlsx",
@@ -44,6 +46,8 @@ UPLOAD_FILES = {
     "capa":      UPLOADS / "capa.xlsx",
     "complaint": UPLOADS / "complaint.xlsx",
     "scar":      UPLOADS / "scar.xlsx",
+    "deviation": UPLOADS / "deviation.xlsx",
+    "banpum":    UPLOADS / "banpum.xlsb",
     "rmt":       UPLOADS / "rmt.xlsb",
     "fpt":       UPLOADS / "fpt.xlsb",
     "template":  UPLOADS / "template.docx",
@@ -466,6 +470,123 @@ def map_scar(cfg: dict):
             "rows": rows}
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 일탈 (Deviation Log)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def map_deviation(cfg: dict):
+    wb = load_wb("deviation")
+    ws = wb["2025"]
+    name_variants = cfg["name_variants"]
+    code_prefix   = cfg["code_prefix"]
+
+    rows = []
+    for r in range(4, ws.max_row + 1):          # 헤더 row3, 데이터 row4~
+        dev_no = str(ws.cell(r, 1).value or "").strip()
+        if not dev_no: continue
+
+        level    = str(ws.cell(r, 2).value or "").strip()
+        title    = str(ws.cell(r, 3).value or "").strip().split("\n")[0]  # 영문 제목만
+        open_dt  = ws.cell(r, 8).value
+        close_dt = ws.cell(r, 10).value
+        status   = str(ws.cell(r, 11).value or "").strip()
+        prod_nm  = str(ws.cell(r, 15).value or "").strip()   # 제품명
+        batch_mk = str(ws.cell(r, 16).value or "").strip()   # 제조번호(마켓)
+
+        # 필터: 제품명에 name_variants 포함, 없으면 code_prefix로 시도
+        if name_variants:
+            if not any(v in prod_nm for v in name_variants): continue
+        elif code_prefix:
+            if code_prefix not in prod_nm and code_prefix not in batch_mk: continue
+
+        open_str  = fmt_date(open_dt)
+        close_str = fmt_date(close_dt) if close_dt else ("진행 중" if status != "종료" else "")
+
+        content = f"[{level}] {title}"
+        date_str = f"{open_str} /\n{close_str}" if close_str else open_str
+
+        review = (status != "종료")
+        review_reason = "미종료 일탈 — 진행 상태 확인 필요" if review else ""
+
+        rows.append({
+            "data": {
+                "No": str(len(rows) + 1),
+                "일탈 번호": dev_no,
+                "일탈 내용 / 조치사항/ 평가": content,
+                "개시일/완료일": date_str,
+            },
+            "sources": [{"file": "Deviation Log 2025.xlsx", "sheet": "2025", "row": r}],
+            "review_required": review,
+            "review_reason": review_reason,
+        })
+    wb.close()
+    return {"id": "t_deviation", "title": "일탈 (Deviation Log 2025)",
+            "columns": ["No", "일탈 번호", "일탈 내용 / 조치사항/ 평가", "개시일/완료일"],
+            "rows": rows}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 반품 내역
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def map_banpum(cfg: dict):
+    import pyxlsb
+    code_prefix   = cfg["code_prefix"]
+    name_variants = cfg["name_variants"]
+    path = get_path("banpum")
+
+    groups: dict = {}   # 반품접수번호 → {date, unit, qty, reason, batches}
+    with pyxlsb.open_workbook(str(path)) as wb:
+        with wb.get_sheet("Sheet1") as ws:
+            for ri, row in enumerate(ws.rows(), start=1):
+                if ri <= 4: continue   # 제목·빈행·헤더·공백 스킵
+                vals = [c.v for c in row]
+                if len(vals) < 16: continue
+                ref_no   = str(vals[1] or "").strip()
+                if not ref_no: continue
+                prod_code = str(vals[3] or "").strip()
+                prod_nm   = str(vals[4] or "").strip()
+                unit      = str(vals[5] or "").strip()
+                batch_no  = str(vals[6] or "").strip()
+                qty       = vals[8] or 0
+                ret_date  = str(vals[13] or "").strip()
+                proc_date = str(vals[14] or "").strip()
+                reason    = str(vals[15] or "").strip()
+
+                # 필터: 제품코드 우선, 없으면 제품명
+                if code_prefix:
+                    if code_prefix not in prod_code: continue
+                elif name_variants:
+                    if not any(v in prod_nm for v in name_variants): continue
+
+                if ref_no not in groups:
+                    groups[ref_no] = {"date": ret_date, "proc": proc_date,
+                                      "unit": unit, "reason": reason,
+                                      "qty": 0, "batches": [], "row": ri}
+                groups[ref_no]["qty"] += float(qty) if qty else 0
+                if batch_no:
+                    groups[ref_no]["batches"].append(batch_no)
+
+    rows = []
+    for ref_no, g in groups.items():
+        qty_str = f"{int(g['qty'])} {g['unit']}" if g["qty"] == int(g["qty"]) else f"{g['qty']} {g['unit']}"
+        batch_str = ", ".join(sorted(set(g["batches"])))
+        review = not g["proc"]
+        review_reason = "처리일자 없음 — 처분 결과 확인 필요" if review else ""
+        rows.append({
+            "data": {
+                "No": str(len(rows) + 1),
+                "반품일자": g["date"],
+                "반품수량": qty_str,
+                "반품사유": g["reason"],
+                "처분결과": g["proc"] or "",
+                "제조번호": batch_str,
+            },
+            "sources": [{"file": "반품 내역.xlsb", "sheet": "Sheet1", "row": g["row"]}],
+            "review_required": review,
+            "review_reason": review_reason,
+        })
+    return {"id": "t_banpum", "title": "반품 내역 (2025)",
+            "columns": ["No", "반품일자", "반품수량", "반품사유", "처분결과", "제조번호"],
+            "rows": rows}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 표22 — 원자재(API) 수입 시험 현황
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def map_t22_api(cfg: dict):
@@ -577,13 +698,13 @@ def map_fpt(cfg: dict):
 
 def build_all_tables(cfg: dict) -> dict:
     return {
-        "t11":     map_t11(cfg),
-        "t16":     map_t16(cfg),
-        "t18":     map_t18(cfg),
-        "t19":     map_t19(cfg),
-        "t_scar":  map_scar(cfg),
-        "t22_api": map_t22_api(cfg),
-        "t_fpt":   map_fpt(cfg),
+        "t11":        map_t11(cfg),
+        "t16":        map_t16(cfg),
+        "t18":        map_t18(cfg),
+        "t19":        map_t19(cfg),
+        "t_scar":     map_scar(cfg),
+        "t_deviation": map_deviation(cfg),
+        "t_banpum":   map_banpum(cfg),
     }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -616,12 +737,13 @@ def _find_header_row_iterrows(first_rows: list[tuple]) -> int:
 # Word 양식 채우기
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WORD_TABLE_MAP = {
-    10: ("t11",     ["No","Batch No","Date of Manufacture","Batch Size","Packaging Unit","Product Batch No.","Market","Remark"]),
-    15: ("t16",     ["No","Change no.","Change Information","Open/Close date"]),
-    17: ("t18",     ["No","CAPA No.","Summary","Open/Close date"]),
-    18: ("t19",     ["No","Complaint No.","Contents / Corrective Action","Receive / Complete Date"]),
-    22: ("t22_api", ["Name of API","Code No.","Total Receipt","Approved","Under Test","Reject"]),
-    25: ("t_scar",  ["No","Company","Contents/ Corrective Action/ Evaluation","Send date/\nComplete Date"]),
+    10: ("t11",          ["No","Batch No","Date of Manufacture","Batch Size","Packaging Unit","Product Batch No.","Market","Remark"]),
+    15: ("t16",          ["No","Change no.","Change Information","Open/Close date"]),
+    17: ("t18",          ["No","CAPA No.","Summary","Open/Close date"]),
+    18: ("t19",          ["No","Complaint No.","Contents / Corrective Action","Receive / Complete Date"]),
+    25: ("t_scar",       ["No","Company","Contents/ Corrective Action/ Evaluation","Send date/\nComplete Date"]),
+     7: ("t_deviation",  ["No","일탈 번호","일탈 내용 / 조치사항/ 평가","개시일/완료일"]),
+    12: ("t_banpum",     ["No","반품일자","반품수량","반품사유","처분결과"]),
 }
 
 def _fill_table(word_tbl, data_rows: list[dict], columns: list[str]):
