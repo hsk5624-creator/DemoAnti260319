@@ -106,7 +106,7 @@ export default function LandingPage() {
   const [sectionDragOver, setSectionDragOver] = useState(false);
   const [unmatchedFiles, setUnmatchedFiles] = useState<string[]>([]);
 
-  const productInfoValid = productName.trim() !== "" && productCode.trim() !== "";
+  const productInfoValid = productCode.trim() !== "";
 
   const templateInputRef = useRef<HTMLInputElement>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -274,12 +274,12 @@ export default function LandingPage() {
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 20, height: 20, borderRadius: 50, background: "var(--brand)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11 }}>1</span>
             제품 정보
-            <span style={{ fontSize: 10, fontWeight: 400, color: "#e53e3e" }}>— 필수</span>
+            <span style={{ fontSize: 10, fontWeight: 400, color: "#e53e3e" }}>— 제품코드 필수</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             {[
-              { label: "제품명", required: true, value: productName, onChange: setProductName, placeholder: "예: 이달비정80밀리그램" },
-              { label: "제품코드", required: true, value: productCode, onChange: setProductCode, placeholder: "예: 30234" },
+              { label: "제품코드", required: true,  value: productCode, onChange: setProductCode, placeholder: "예: 30234" },
+              { label: "제품명",   required: false, value: productName, onChange: setProductName, placeholder: "예: 이달비정80밀리그램 (선택)" },
               { label: "원료명 (API)", required: false, value: apiName, onChange: setApiName, placeholder: "예: 아질사르탄메독소밀칼륨 (선택)" },
             ].map(({ label, required, value, onChange, placeholder }) => (
               <div key={label}>
@@ -488,7 +488,7 @@ export default function LandingPage() {
 
           <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>
             {!productInfoValid
-              ? "제품명과 제품코드를 먼저 입력하세요."
+              ? "제품코드를 먼저 입력하세요."
               : "샘플 데이터로 시작하면 기존에 저장된 예시 파일을 사용합니다."}
           </p>
         </div>

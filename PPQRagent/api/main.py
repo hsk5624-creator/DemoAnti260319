@@ -34,7 +34,7 @@ SAMPLE_FILES = {
     "fpt":       SAMPLE / "2) 완제품 시험성적 관리.xlsb",
     "bdc_100k":  SAMPLE / "Batch Data Collection_300244_M04 80mg (Inist)_O.xlsx",
     "bdc_700k":  SAMPLE / "Batch Data Collection_300244_M04 80mg (Inist) (Batch size 700,000 T)_O.xlsx",
-    "template":  BASE   / "PPQR_빈양식.docx",
+    "template":  BASE   / "제품명 C-PPQR-허가번호-년도(버전)_작성예시2025.docx",
 }
 
 UPLOAD_FILES = {
@@ -703,8 +703,8 @@ def generate_filled_word(tables: dict) -> Path:
 def get_tables(product_name: str = "", product_code: str = "", api_name: str = "", refresh: bool = False):
     global _tables_cache, _tables_cache_key
     cfg = get_product_config(product_name, product_code, api_name)
-    if not cfg["product_name"] and not cfg["product_code"]:
-        return {"error": "no_product", "message": "제품 정보를 먼저 설정하세요."}
+    if not cfg["product_code"]:
+        return {"error": "no_product", "message": "제품코드를 먼저 입력하세요."}
     cache_key = _make_cache_key(cfg)
     if _tables_cache is None or refresh or cache_key != _tables_cache_key:
         _tables_cache = build_all_tables(cfg)

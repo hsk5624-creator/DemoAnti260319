@@ -1,68 +1,87 @@
 @echo off
-chcp 65001 > nul
 title PPQR Agent
 
 echo.
 echo  ====================================
-echo   PPQR Agent ^| 서버 시작
+echo   PPQR Agent
 echo  ====================================
 echo.
+echo  Bat started OK. Press any key to continue diagnostics...
+pause > nul
 
-:: ── 사전 확인 ──────────────────────────────────────────────────────
+:: Pre-check: uvicorn
 python -c "import uvicorn" > nul 2>&1
-if errorlevel 1 (
-    echo  [오류] Python 패키지가 설치되지 않았습니다.
-    echo.
-    echo  아래 명령을 실행하세요:
-    echo    pip install fastapi uvicorn openpyxl pyxlsb python-docx lxml
-    echo.
-    pause
-    exit /b 1
-)
+if errorlevel 1 goto NO_PYTHON
 
-if not exist "%~dp0web\node_modules" (
-    echo  [오류] node_modules 없음. 아래 명령을 실행하세요:
-    echo    cd web ^&^& npm install
-    echo.
-    pause
-    exit /b 1
-)
+:: Pre-check: node_modules
+if not exist "%~dp0web\node_modules" goto NO_NODE
 
-:: ── 기존 프로세스 종료 ──────────────────────────────────────────────
-echo  기존 서버 프로세스 정리 중...
-
-for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr " :8000 "') do taskkill /PID %%p /F > nul 2>&1
-for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr " :3001 "') do taskkill /PID %%p /F > nul 2>&1
-
+:: Kill existing processes on ports 8000 / 3001
+echo  Cleaning up existing processes...
+for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /PID %%p /F > nul 2>&1
+for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":3001 "') do taskkill /PID %%p /F > nul 2>&1
 timeout /t 1 /nobreak > nul
 
-:: ── 서버 시작 (따옴표 충돌 방지: %~dp0xxx 경로는 공백 없으므로 내부 따옴표 제거) ──
-echo  [1/2] FastAPI 서버 시작 (port 8000)...
-start "PPQR FastAPI" cmd /k "cd /d %~dp0api && python -m uvicorn main:app --port 8000 --reload"
+echo  [1/2] FastAPI server starting (port 8000)...
+cd /d "%~dp0api"
+start "PPQR FastAPI" cmd /k "python -m uvicorn main:app --port 8000 --reload"
 
-echo  [2/2] Next.js 개발 서버 시작 (port 3001)...
-start "PPQR Next.js" cmd /k "cd /d %~dp0web && npm run dev"
+echo  [2/2] Next.js server starting (port 3001)...
+cd /d "%~dp0web"
+start "PPQR Next.js" cmd /k "npm run dev"
 
-:: ── 포트 준비 대기 ────────────────────────────────────────────────
 echo.
-echo  서버 초기화 대기 중...
-echo  Next.js 첫 실행 시 30초 이상 걸릴 수 있습니다. 잠시 기다려주세요.
+echo  Waiting for Next.js to compile... (first run may take 30+ seconds)
 echo.
 
+set TRIES=0
 :WAIT_LOOP
 timeout /t 2 /nobreak > nul
-curl -s http://localhost:3001 > nul 2>&1
-if %errorlevel%==0 goto READY
-echo  . 대기 중...
+set /a TRIES+=1
+curl -s -o nul -w "%%{http_code}" http://localhost:3001 2>nul | findstr /r "^[23]" > nul
+if not errorlevel 1 goto READY
+if %TRIES% geq 60 goto TIMEOUT
+echo  . still waiting... (%TRIES% x 2s)
 goto WAIT_LOOP
 
 :READY
 echo.
 echo  ====================================
-echo   서버 준비 완료!
+echo   Server ready!
 echo   http://localhost:3001
 echo  ====================================
 echo.
-start "" http://localhost:3001
+start "" "http://localhost:3001"
+echo.
+echo  [INFO] Browser opened. Servers are running in separate windows.
+echo  [INFO] Close "PPQR FastAPI" / "PPQR Next.js" windows to stop.
+echo.
+pause
+goto END
 
-echo  서버 종료: 열린 서버 창(PPQR FastAPI / PPQR Next.js)을 닫으세요.
+:TIMEOUT
+echo.
+echo  [WARNING] Server did not respond within 120 seconds.
+echo  Check the "PPQR FastAPI" and "PPQR Next.js" windows for error messages.
+echo  You can manually open: http://localhost:3001
+echo.
+pause
+goto END
+
+:NO_PYTHON
+echo.
+echo  [ERROR] uvicorn not installed.
+echo  Please run: pip install fastapi uvicorn openpyxl pyxlsb python-docx lxml
+echo.
+pause
+goto END
+
+:NO_NODE
+echo.
+echo  [ERROR] web\node_modules is missing.
+echo  Please run: cd web  then  npm install
+echo.
+pause
+goto END
+
+:END
