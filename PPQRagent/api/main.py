@@ -220,14 +220,24 @@ def build_batch_size_map():
 BATCH_SIZE_MAP = build_batch_size_map()
 _tables_cache: dict | None = None
 _tables_cache_key: str = ""
+import threading
+_cache_lock = threading.Lock()   # 동시 빌드 중복 방지 (업로드 직후 백그라운드 + /api/tables 동시 호출 케이스)
+
+def _ensure_cache(cfg: dict) -> dict:
+    """캐시가 신선하면 반환, 아니면 재빌드. 두 스레드가 동시 진입해도 한 번만 빌드."""
+    global _tables_cache, _tables_cache_key
+    cache_key = _make_cache_key(cfg)
+    with _cache_lock:
+        if _tables_cache is None or cache_key != _tables_cache_key:
+            _tables_cache = build_all_tables(cfg)
+            _tables_cache_key = cache_key
+        return _tables_cache
 
 def _preload_cache():
-    global _tables_cache, _tables_cache_key
     cfg = get_product_config()
     if not cfg["product_code"] and not cfg["product_name"]:
         return
-    _tables_cache = build_all_tables(cfg)
-    _tables_cache_key = _make_cache_key(cfg)
+    _ensure_cache(cfg)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 표11 — 제조 배치
@@ -855,15 +865,13 @@ def generate_filled_word(tables: dict) -> Path:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @app.get("/api/tables")
 def get_tables(product_name: str = "", product_code: str = "", api_name: str = "", refresh: bool = False):
-    global _tables_cache, _tables_cache_key
+    global _tables_cache
     cfg = get_product_config(product_name, product_code, api_name)
     if not cfg["product_code"]:
         return {"error": "no_product", "message": "제품코드를 먼저 입력하세요."}
-    cache_key = _make_cache_key(cfg)
-    if _tables_cache is None or refresh or cache_key != _tables_cache_key:
-        _tables_cache = build_all_tables(cfg)
-        _tables_cache_key = cache_key
-    return _tables_cache
+    if refresh:
+        _tables_cache = None
+    return _ensure_cache(cfg)
 
 
 @app.post("/api/upload")
@@ -898,6 +906,12 @@ async def upload_files(
 
     global _tables_cache
     _tables_cache = None
+
+    # 백그라운드 캐시 워밍업: /review 페이지 도착 전에 빌드 시작 → 첫 /api/tables 즉시 응답
+    cfg = get_product_config(product_name, product_code, api_name)
+    if cfg["product_code"] or cfg["product_name"]:
+        asyncio.get_event_loop().run_in_executor(None, _ensure_cache, cfg)
+
     return {"uploaded": uploaded, "count": len(uploaded)}
 
 
@@ -926,16 +940,12 @@ def upload_status():
 
 @app.get("/api/download-word")
 def download_word():
-    global _tables_cache, _tables_cache_key
     cfg = get_product_config()
     if not cfg["product_name"] and not cfg["product_code"]:
         return {"error": "제품 정보가 설정되지 않았습니다."}
-    cache_key = _make_cache_key(cfg)
-    if _tables_cache is None or cache_key != _tables_cache_key:
-        _tables_cache = build_all_tables(cfg)
-        _tables_cache_key = cache_key
+    tables = _ensure_cache(cfg)
     try:
-        out_path = generate_filled_word(_tables_cache)
+        out_path = generate_filled_word(tables)
         return FileResponse(
             path=str(out_path),
             filename="PPQR_완성본.docx",
